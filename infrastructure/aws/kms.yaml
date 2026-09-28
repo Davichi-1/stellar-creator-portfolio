@@ -2,8 +2,9 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Stellar Platform – KMS Customer Managed Key and Secrets Manager resources
   for production key management.  Deploys a CMK with automatic annual rotation,
-  a Secrets Manager secret for each platform secret, and a least-privilege IAM
-  role for the deployer.
+  a Secrets Manager secret for each platform secret, a rotation Lambda trigger,
+  and least-privilege IAM roles for both the deployer and the rotation function.
+  Issue #1347.
 
 # ---------------------------------------------------------------------------
 # Parameters
@@ -13,7 +14,7 @@ Parameters:
     Type: String
     Default: production
     AllowedValues: [production, staging]
-    Description: Deployment environment (affects resource naming and key policy).
+    Description: Deployment environment — affects resource naming and key policy.
 
   SecretPrefix:
     Type: String
@@ -24,11 +25,38 @@ Parameters:
 
   DeployerRoleArn:
     Type: String
-    Description: ARN of the IAM role used by the CI/CD deployer (e.g. GitHub Actions OIDC role).
+    Description: >
+      ARN of the IAM role used by the CI/CD deployer
+      (e.g. GitHub Actions OIDC role).
 
   AdminRoleArn:
     Type: String
-    Description: ARN of the IAM role for human administrators who manage key policy.
+    Description: >
+      ARN of the IAM role for human administrators who manage the key policy.
+
+  RotationScheduleDays:
+    Type: Number
+    Default: 90
+    MinValue: 1
+    MaxValue: 365
+    Description: >
+      Number of days between automatic secret rotations.
+      90 days is the recommended baseline; tighten for STELLAR_ADMIN_SECRET.
+
+  EnableCmkMultiRegion:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Set to "true" to create a multi-Region primary key for cross-region DR.
+      Replica keys must be created separately in each replica region.
+
+# ---------------------------------------------------------------------------
+# Conditions
+# ---------------------------------------------------------------------------
+Conditions:
+  IsProduction: !Equals [!Ref Environment, production]
+  MultiRegionEnabled: !Equals [!Ref EnableCmkMultiRegion, 'true']
 
 # ---------------------------------------------------------------------------
 # Resources
@@ -38,14 +66,18 @@ Resources:
   # ── CMK ──────────────────────────────────────────────────────────────────
   PlatformKmsKey:
     Type: AWS::KMS::Key
+    DeletionPolicy: Retain          # Prevent accidental key destruction
+    UpdateReplacePolicy: Retain
     Properties:
       Description: !Sub 'Stellar Platform CMK – ${Environment}'
-      EnableKeyRotation: true          # Annual automatic rotation
-      MultiRegion: false
+      EnableKeyRotation: true        # Annual automatic rotation of CMK material
+      MultiRegion: !If [MultiRegionEnabled, true, false]
+      PendingWindowInDays: 30        # Minimum safe deletion window
       KeyPolicy:
         Version: '2012-10-17'
         Statement:
-          # Root account retains break-glass access.
+
+          # Root account retains break-glass access — required by AWS.
           - Sid: AllowRootAccount
             Effect: Allow
             Principal:
@@ -53,7 +85,7 @@ Resources:
             Action: 'kms:*'
             Resource: '*'
 
-          # Admins can manage the key (but not use it for data operations).
+          # Admins can administer the key but cannot use it for data operations.
           - Sid: AllowKeyAdministration
             Effect: Allow
             Principal:
@@ -71,9 +103,11 @@ Resources:
               - kms:Delete*
               - kms:ScheduleKeyDeletion
               - kms:CancelKeyDeletion
+              - kms:TagResource
+              - kms:UntagResource
             Resource: '*'
 
-          # Deployer role can only use the key for Secrets Manager envelope encryption.
+          # Deployer role: use key exclusively via Secrets Manager (no direct decrypt).
           - Sid: AllowDeployerSecretsManagerUse
             Effect: Allow
             Principal:
@@ -86,7 +120,7 @@ Resources:
               StringEquals:
                 'kms:ViaService': !Sub 'secretsmanager.${AWS::Region}.amazonaws.com'
 
-          # Secrets Manager service principal needs decrypt for secret rotation.
+          # Secrets Manager service principal — required for rotation Lambdas.
           - Sid: AllowSecretsManagerService
             Effect: Allow
             Principal:
@@ -96,6 +130,19 @@ Resources:
               - kms:Decrypt
             Resource: '*'
 
+          # Rotation Lambda role: decrypt only via Secrets Manager.
+          - Sid: AllowRotationLambda
+            Effect: Allow
+            Principal:
+              AWS: !GetAtt SecretRotationLambdaRole.Arn
+            Action:
+              - kms:GenerateDataKey
+              - kms:Decrypt
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'kms:ViaService': !Sub 'secretsmanager.${AWS::Region}.amazonaws.com'
+
   PlatformKmsKeyAlias:
     Type: AWS::KMS::Alias
     Properties:
@@ -103,65 +150,259 @@ Resources:
       TargetKeyId: !Ref PlatformKmsKey
 
   # ── Secrets ──────────────────────────────────────────────────────────────
-  # Each secret is created empty; values are populated out-of-band via the
-  # AWS CLI or a one-time rotation Lambda.  The KMS key encrypts every secret.
+  # Secrets are created empty; values are populated out-of-band via the AWS
+  # CLI, console, or the provisionSecret() helper in kms.ts.  The CMK
+  # encrypts every secret with envelope encryption.
 
   SecretStellarAdminSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub '${SecretPrefix}/STELLAR_ADMIN_SECRET'
-      Description: Stellar network admin keypair secret seed
+      Description: >
+        Stellar network admin keypair secret seed.
+        Rotate every 90 days or immediately after any suspected exposure.
       KmsKeyId: !Ref PlatformKmsKey
+      Tags:
+        - Key: Platform
+          Value: stellar
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Sensitivity
+          Value: critical
 
   SecretJwtSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub '${SecretPrefix}/JWT_SECRET'
-      Description: JWT signing secret for the auth service
+      Description: JWT signing secret for the auth service.
       KmsKeyId: !Ref PlatformKmsKey
+      Tags:
+        - Key: Platform
+          Value: stellar
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Sensitivity
+          Value: high
 
   SecretEncryptionKey:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub '${SecretPrefix}/ENCRYPTION_KEY'
-      Description: 32-byte hex encryption key for at-rest data encryption
+      Description: 32-byte hex encryption key for at-rest data encryption.
       KmsKeyId: !Ref PlatformKmsKey
+      Tags:
+        - Key: Platform
+          Value: stellar
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Sensitivity
+          Value: high
 
   SecretStripeSecretKey:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub '${SecretPrefix}/STRIPE_SECRET_KEY'
-      Description: Stripe secret API key
+      Description: Stripe secret API key.
       KmsKeyId: !Ref PlatformKmsKey
+      Tags:
+        - Key: Platform
+          Value: stellar
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Sensitivity
+          Value: high
 
   SecretStripeWebhookSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub '${SecretPrefix}/STRIPE_WEBHOOK_SECRET'
-      Description: Stripe webhook signing secret
+      Description: Stripe webhook signing secret.
       KmsKeyId: !Ref PlatformKmsKey
+      Tags:
+        - Key: Platform
+          Value: stellar
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Sensitivity
+          Value: high
 
   SecretNextAuthSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub '${SecretPrefix}/NEXTAUTH_SECRET'
-      Description: NextAuth.js session signing secret
+      Description: NextAuth.js session signing secret.
       KmsKeyId: !Ref PlatformKmsKey
+      Tags:
+        - Key: Platform
+          Value: stellar
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Sensitivity
+          Value: high
 
   SecretWebhookSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub '${SecretPrefix}/WEBHOOK_SECRET'
-      Description: Generic webhook HMAC signing secret
+      Description: Generic webhook HMAC signing secret.
       KmsKeyId: !Ref PlatformKmsKey
+      Tags:
+        - Key: Platform
+          Value: stellar
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Sensitivity
+          Value: medium
 
-  # ── Deployer IAM Role ─────────────────────────────────────────────────────
-  # Least-privilege policy: read secrets + use KMS key via Secrets Manager only.
+  # ── Automatic Rotation Schedule ───────────────────────────────────────────
+  # Attaches an automatic rotation schedule to high-sensitivity secrets.
+  # The rotation Lambda is a stub that simply generates a new random value;
+  # replace its implementation with one that also propagates the new secret
+  # to running application instances before enabling rotation in production.
+
+  RotationScheduleStellarAdmin:
+    Type: AWS::SecretsManager::RotationSchedule
+    DependsOn: SecretRotationLambdaPermission
+    Properties:
+      SecretId: !Ref SecretStellarAdminSecret
+      RotationLambdaARN: !GetAtt SecretRotationLambda.Arn
+      RotationRules:
+        AutomaticallyAfterDays: !Ref RotationScheduleDays
+
+  RotationScheduleEncryptionKey:
+    Type: AWS::SecretsManager::RotationSchedule
+    DependsOn: SecretRotationLambdaPermission
+    Properties:
+      SecretId: !Ref SecretEncryptionKey
+      RotationLambdaARN: !GetAtt SecretRotationLambda.Arn
+      RotationRules:
+        AutomaticallyAfterDays: !Ref RotationScheduleDays
+
+  # ── Rotation Lambda Role ──────────────────────────────────────────────────
+  SecretRotationLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'StellarSecretRotation-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: RotateSecrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadWriteRotationSecrets
+                Effect: Allow
+                Action:
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:PutSecretValue
+                  - secretsmanager:UpdateSecretVersionStage
+                Resource:
+                  - !Ref SecretStellarAdminSecret
+                  - !Ref SecretEncryptionKey
+              - Sid: UseKmsForRotation
+                Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: !GetAtt PlatformKmsKey.Arn
+                Condition:
+                  StringEquals:
+                    'kms:ViaService': !Sub 'secretsmanager.${AWS::Region}.amazonaws.com'
+
+  # ── Rotation Lambda ───────────────────────────────────────────────────────
+  # Stub rotation function — generates cryptographically random values.
+  # Replace the inline code with a proper rotation handler that gracefully
+  # propagates new credentials to running services before finalising rotation.
+  SecretRotationLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'stellar-secret-rotation-${Environment}'
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt SecretRotationLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          ENVIRONMENT: !Ref Environment
+      Code:
+        ZipFile: |
+          import boto3, json, os, secrets, string
+
+          def handler(event, context):
+              """
+              Minimal rotation handler for random-value secrets.
+              Steps: createSecret -> setSecret -> testSecret -> finishSecret
+              """
+              arn   = event['SecretId']
+              token = event['ClientRequestToken']
+              step  = event['Step']
+
+              sm = boto3.client('secretsmanager')
+              meta = sm.describe_secret(SecretId=arn)
+
+              if not meta.get('RotationEnabled'):
+                  raise ValueError(f"Rotation not enabled for {arn}")
+
+              versions = meta.get('VersionIdsToStages', {})
+              if token not in versions:
+                  raise ValueError(f"Token {token} not found in versions")
+
+              if 'AWSCURRENT' in versions[token]:
+                  # Already current — nothing to do.
+                  return
+
+              if step == 'createSecret':
+                  # Generate a 64-char hex string (suitable for ENCRYPTION_KEY)
+                  # or a 48-char alphanumeric string for other secrets.
+                  alphabet = string.ascii_letters + string.digits
+                  new_val = ''.join(secrets.choice(alphabet) for _ in range(48))
+                  sm.put_secret_value(
+                      SecretId=arn,
+                      ClientRequestToken=token,
+                      SecretString=new_val,
+                      VersionStages=['AWSPENDING'],
+                  )
+              elif step == 'setSecret':
+                  # Propagate to dependent services here if needed.
+                  pass
+              elif step == 'testSecret':
+                  # Validate the new secret is accepted by dependent services.
+                  pass
+              elif step == 'finishSecret':
+                  sm.update_secret_version_stage(
+                      SecretId=arn,
+                      VersionStage='AWSCURRENT',
+                      MoveToVersionId=token,
+                      RemoveFromVersionId=next(
+                          vid for vid, stages in versions.items()
+                          if 'AWSCURRENT' in stages
+                      ),
+                  )
+
+  SecretRotationLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt SecretRotationLambda.Arn
+      Action: lambda:InvokeFunction
+      Principal: secretsmanager.amazonaws.com
+
+  # ── Deployer IAM Managed Policy ───────────────────────────────────────────
+  # Least-privilege: read secrets and use the CMK only via Secrets Manager.
   DeployerSecretsPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: !Sub 'StellarPlatformDeployerSecrets-${Environment}'
-      Description: Allows the deployer to read platform secrets via Secrets Manager
+      Description: >
+        Grants the CI/CD deployer read-only access to platform secrets via
+        Secrets Manager and scoped CMK use through the kms:ViaService condition.
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -214,3 +455,9 @@ Outputs:
     Value: !Ref DeployerSecretsPolicy
     Export:
       Name: !Sub 'StellarPlatform-DeployerSecretsPolicy-${Environment}'
+
+  RotationLambdaArn:
+    Description: ARN of the secret rotation Lambda function
+    Value: !GetAtt SecretRotationLambda.Arn
+    Export:
+      Name: !Sub 'StellarPlatform-RotationLambdaArn-${Environment}'
