@@ -181,6 +181,18 @@
             "presentation": "card",
             "animation": "slide_from_right",
             "gestureEnabled": true
+          },
+          "explore": {
+            "title": "Explore",
+            "presentation": "card",
+            "animation": "fade",
+            "gestureEnabled": true
+          },
+          "bounty-detail": {
+            "title": "Bounty",
+            "presentation": "card",
+            "animation": "slide_from_right",
+            "gestureEnabled": true
           }
         }
       }
