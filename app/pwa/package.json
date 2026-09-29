@@ -4,9 +4,9 @@
   "description": "Professional creator portfolio as a Progressive Web App",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build && npm run validate:pwa",
-    "start": "next start",
+    "dev": "node init && next dev",
+    "build": "node init && next build && npm run validate:pwa",
+    "start": "node init && next start",
     "lint": "eslint . --ext ts,tsx",
     "format": "prettier --write .",
     "type-check": "tsc --noEmit",
