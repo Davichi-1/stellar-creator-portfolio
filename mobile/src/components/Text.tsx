@@ -5,6 +5,11 @@
  * `lineHeight` are intentionally removed from the accepted `style` prop (via
  * `Omit`) so screens cannot bypass the scale. The semantic text color is
  * resolved from the active color scheme, and can be overridden with `color`.
+ *
+ * Issue #1354 — "Define standard native precise Typography styles matching
+ * current design system": updated to consume the expanded variant set, honour
+ * `letterSpacing`, `textTransform`, `fontFamily` from each variant, and use the
+ * new `createTypographyStyle` helper for accessibility font scaling.
  */
 import React, { memo, useMemo } from 'react';
 import {
@@ -15,24 +20,32 @@ import {
   type TextStyle,
 } from 'react-native';
 import { colors } from '../theme/colors';
-import { typography, type TypographyVariant } from '../theme/typography';
+import {
+  createTypographyStyle,
+  type TypographyVariant,
+} from '../theme/typography';
 import { useFontScale } from '../utils/accessibility';
 
 /** `TextStyle` with the scale-owned keys removed so they can't be overridden. */
 export type RestrictedTextStyle = Omit<
   TextStyle,
-  'fontSize' | 'fontWeight' | 'lineHeight'
+  'fontSize' | 'fontWeight' | 'lineHeight' | 'letterSpacing' | 'textTransform' | 'fontFamily'
 >;
 
 /** Props for the {@link Text} component. */
 export interface TextProps extends Omit<RNTextProps, 'style'> {
-  /** Typography scale variant. Defaults to `bodyMedium`. */
+  /**
+   * Typography scale variant.  Defaults to `bodyMedium`.
+   *
+   * All variants are defined in `src/theme/typography.ts`.
+   */
   variant?: TypographyVariant;
   /** Optional override for the semantic text color. */
   color?: string;
   /**
-   * Additional text styles. `fontSize`, `fontWeight`, and `lineHeight` are
-   * disallowed — use `variant` instead.
+   * Additional text styles. `fontSize`, `fontWeight`, `lineHeight`,
+   * `letterSpacing`, `textTransform`, and `fontFamily` are disallowed —
+   * use `variant` instead.
    */
   style?: StyleProp<RestrictedTextStyle>;
 }
@@ -55,14 +68,8 @@ function TextComponent({
   const fontScale = useFontScale();
 
   const baseStyle = useMemo<StyleProp<TextStyle>>(() => {
-    const base = typography[variant];
-    // Scale fontSize and lineHeight by the font scale
-    const scaledStyle: TextStyle = {
-      ...base,
-      fontSize: base.fontSize * fontScale,
-      lineHeight: base.lineHeight * fontScale,
-    };
-    return [scaledStyle, { color: resolvedColor }];
+    const scaled = createTypographyStyle(variant, fontScale);
+    return [scaled, { color: resolvedColor }];
   }, [variant, resolvedColor, fontScale]);
 
   return <RNText style={[baseStyle, style]} {...rest} />;

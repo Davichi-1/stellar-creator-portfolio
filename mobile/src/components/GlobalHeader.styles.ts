@@ -3,6 +3,9 @@
  *
  * Keeping every style here (rather than inline in the component) avoids
  * recreating style objects on each render and keeps the component body lean.
+ *
+ * Issue #1353 — "Create Native Authenticated Global Header component":
+ * Added avatar slot styles, user-greeting area, and notification badge.
  */
 import { StyleSheet } from 'react-native';
 import {
@@ -10,6 +13,7 @@ import {
   FontSize,
   FontWeight,
   LightColors,
+  Radius,
   Spacing,
 } from '../theme/tokens';
 
@@ -25,6 +29,11 @@ export interface HeaderPalette {
   border: string;
   title: string;
   icon: string;
+  avatarBackground: string;
+  avatarText: string;
+  badgeBackground: string;
+  badgeText: string;
+  greetingText: string;
 }
 
 /**
@@ -37,12 +46,22 @@ export const headerPalette: Record<'light' | 'dark', HeaderPalette> = {
     border: LightColors.border,
     title: LightColors.text,
     icon: LightColors.text,
+    avatarBackground: '#6366f1',
+    avatarText: '#ffffff',
+    badgeBackground: '#ef4444',
+    badgeText: '#ffffff',
+    greetingText: LightColors.textSecondary,
   },
   dark: {
     background: DarkColors.surface,
     border: DarkColors.border,
     title: DarkColors.text,
     icon: DarkColors.text,
+    avatarBackground: '#4f46e5',
+    avatarText: '#ffffff',
+    badgeBackground: '#ef4444',
+    badgeText: '#ffffff',
+    greetingText: DarkColors.textSecondary,
   },
 };
 
@@ -70,6 +89,11 @@ export const styles = StyleSheet.create({
   backButton: {
     paddingVertical: Spacing.xs,
     paddingRight: Spacing.sm,
+    // Minimum 44 × 44 pt touch target (Apple HIG / Android 48 dp guideline)
+    minHeight: 44,
+    minWidth: 44,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
   },
   backLabel: {
     fontSize: FontSize.xl,
@@ -80,5 +104,75 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: FontSize.lg,
     fontWeight: FontWeight.semibold,
+  },
+  // ── Authenticated-header additions ──────────────────────────────────────
+  /** Wraps avatar image / initials circle. */
+  avatarContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.full,
+  },
+  avatarInitials: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    color: '#ffffff',
+  },
+  /** Red badge overlaid on the avatar/notification icon. */
+  notificationBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: Radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: LightColors.surface, // overridden dynamically
+  },
+  notificationBadgeText: {
+    fontSize: 10,
+    fontWeight: FontWeight.bold,
+    lineHeight: 14,
+    color: '#ffffff',
+  },
+  /** Avatar + greeting stacked vertically in the leading slot. */
+  userSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  greetingColumn: {
+    flexDirection: 'column',
+    justifyContent: 'center',
+  },
+  greetingLabel: {
+    fontSize: FontSize.xs,
+    fontWeight: FontWeight.regular,
+    lineHeight: 14,
+  },
+  greetingName: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.semibold,
+    lineHeight: 18,
+  },
+  /** Notification bell wrapper in the trailing slot. */
+  notificationButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationBadgeWrapper: {
+    position: 'relative',
   },
 });
