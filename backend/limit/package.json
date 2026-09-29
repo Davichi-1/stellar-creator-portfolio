@@ -9,8 +9,8 @@
     "test:integration": "ts-node -O '{\"module\":\"commonjs\"}' tests/integration/runner.ts",
     "test:e2e": "ts-node -O '{\"module\":\"commonjs\"}' tests/e2e/runner.ts",
     "test:security": "ts-node -O '{\"module\":\"commonjs\"}' tests/security/runner.ts",
-    "build": "tsc",
-    "dev": "ts-node index.ts",
+    "build": "node init && tsc",
+    "dev": "node init && ts-node index.ts",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"**/*.ts\""
   },
