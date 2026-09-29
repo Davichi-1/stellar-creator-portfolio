@@ -10,8 +10,6 @@ next.user-config.*
 
 # Environment variables — never commit real credentials
 # Root-level env files
-.env
-.env.*
 .env*.local
 !.env.example
 !**/.env.example
@@ -32,7 +30,6 @@ backend/target/
 **/test_snapshots/
 *.log
 .idea/
-.vscode/
 
 # TypeScript build cache
 tsconfig.tsbuildinfo
@@ -81,8 +78,11 @@ jspm_packages/
 
 # Yarn Integrity file
 .yarn-integrity
-.env
 somzilla.md
 
 # PR description files — local reference only, not for version control
 PR_*.md
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+config.bat
