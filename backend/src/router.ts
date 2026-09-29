@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { protectedProcedure, publicProcedure, router } from './trpc-setup';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
+import { rateLimit } from './rateLimit';
 
 // Root router with Prisma-backed queries
 export const appRouter = router({
@@ -15,6 +16,7 @@ export const appRouter = router({
           status: z.enum(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
         })
       )
+      .use(rateLimit({ windowMs: 60_000, max: 60 }))
       .query(async ({ input }) => {
         const bounties = await prisma.bounty.findMany({
           take: input.take + 1, // +1 to determine hasNextPage
@@ -64,6 +66,7 @@ export const appRouter = router({
           cursor: z.string().optional(),
         })
       )
+      .use(rateLimit({ windowMs: 60_000, max: 300 }))
       .query(async ({ ctx, input }) => {
         const bounties = await prisma.bounty.findMany({
           take: input.take + 1,
@@ -98,6 +101,7 @@ export const appRouter = router({
     // Public query to fetch single bounty by id
     get: publicProcedure
       .input(z.object({ id: z.string() }))
+      .use(rateLimit({ windowMs: 60_000, max: 60 }))
       .query(async ({ input }) => {
         return await prisma.bounty.findUnique({
           where: { id: input.id },
@@ -137,6 +141,7 @@ export const appRouter = router({
           difficulty: z.enum(['beginner', 'intermediate', 'advanced', 'expert']),
         })
       )
+      .use(rateLimit({ windowMs: 60_000, max: 300 }))
       .mutation(async ({ ctx, input }) => {
         return await prisma.bounty.create({
           data: {
@@ -152,6 +157,7 @@ export const appRouter = router({
   creators: router({
     featured: publicProcedure
       .input(z.object({ limit: z.number().int().positive().max(20).default(3) }))
+      .use(rateLimit({ windowMs: 60_000, max: 60 }))
       .query(async ({ input }) => {
         return await prisma.creator.findMany({
           take: input.limit,
@@ -185,6 +191,7 @@ export const appRouter = router({
           search: z.string().optional(),
         })
       )
+      .use(rateLimit({ windowMs: 60_000, max: 60 }))
       .query(async ({ input }) => {
         const where: any = {};
         if (input.discipline) {
@@ -255,6 +262,7 @@ export const appRouter = router({
 
     get: publicProcedure
       .input(z.object({ id: z.string() }))
+      .use(rateLimit({ windowMs: 60_000, max: 60 }))
       .query(async ({ input }) => {
         return await prisma.creator.findUnique({
           where: { id: input.id },
@@ -281,6 +289,7 @@ export const appRouter = router({
           token: z.string(),
         })
       )
+      .use(rateLimit({ windowMs: 60_000, max: 300 }))
       .mutation(async ({ input }) => {
         // This would integrate with the Stellar escrow smart contract
         // For now, return a mock response
@@ -294,6 +303,7 @@ export const appRouter = router({
 
     release: protectedProcedure
       .input(z.object({ escrowId: z.string() }))
+      .use(rateLimit({ windowMs: 60_000, max: 300 }))
       .mutation(async ({ input }) => {
         return {
           escrowId: input.escrowId,
@@ -317,6 +327,7 @@ export const appRouter = router({
           link: z.string().url().optional(),
         })
       )
+      .use(rateLimit({ windowMs: 60_000, max: 300 }))
       .mutation(async ({ ctx, input }) => {
         return await prisma.project.create({
           data: {
@@ -334,6 +345,7 @@ export const appRouter = router({
           cursor: z.string().optional(),
         })
       )
+      .use(rateLimit({ windowMs: 60_000, max: 60 }))
       .query(async ({ input }) => {
         const where = input.creatorId ? { creatorId: input.creatorId } : {};
 
@@ -370,6 +382,7 @@ export const appRouter = router({
           period: z.enum(['7d', '30d', '90d', '1y']).default('30d'),
         })
       )
+      .use(rateLimit({ windowMs: 60_000, max: 300 }))
       .query(async ({ ctx, input }) => {
         const userId = ctx.user!.id;
 
@@ -502,6 +515,7 @@ export const appRouter = router({
           nullifier: z.string(),
         })
       )
+      .use(rateLimit({ windowMs: 60_000, max: 10 }))
       .mutation(async ({ input }) => {
         // Check if nullifier has already been used (replay protection)
         const existingNullifier = await prisma.zKNullifier.findUnique({

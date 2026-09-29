@@ -8,13 +8,18 @@ export function rateLimitMiddleware(opts?: { unauthenticatedLimit?: number; auth
 
   return function (req: Request, res: Response, next: NextFunction) {
     try {
-      const identifier = (req.ip || req.headers['x-forwarded-for'] || 'unknown') as string;
-      const isAuthed = !!(req as any).user;
-      const limit = isAuthed ? authenticatedLimit : unauthenticatedLimit;
+      const ipAuthenticated = !!(req as any).user;
+      const identifier = ipAuthenticated
+        ? `user:${((req as any).user?.id || (req as any).user?.userId || 'unknown')} `
+        : ((req.ip || (req.headers['x-forwarded-for'] as string) || 'unknown') as string);
+      const limit = ipAuthenticated ? authenticatedLimit : unauthenticatedLimit;
       const result = checkRate(identifier, limit, 60);
 
+      res.setHeader('X-RateLimit-Limit', String(limit));
       res.setHeader('X-RateLimit-Remaining', String(result.remaining));
+      res.setHeader('X-RateLimit-Reset', String(Math.ceil(result.resetAt / 1000)));
       if (!result.allowed) {
+        res.setHeader('Retry-After', String(result.retryAfter));
         res.status(429).json({ error: 'Too many requests' });
         return;
       }

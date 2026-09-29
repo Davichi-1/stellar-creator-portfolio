@@ -1,13 +1,15 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import jwt from 'jsonwebtoken';
+import jwt from 'jsontwebtoken';
 import { hashApiKey } from '@/lib/api-keys';
+import { checkRateLimit, RateLimitResult } from '@/src/rateLimit';
 
 export interface GraphQLContext {
   req: NextRequest;
   userId?: string;
   apiKeyId?: string;
   isAuthenticated: boolean;
+  rateLimit?: RateLimitResult;
 }
 
 export async function createGraphQLContext(req: NextRequest): Promise<GraphQLContext> {
@@ -28,7 +30,7 @@ export async function createGraphQLContext(req: NextRequest): Promise<GraphQLCon
 
       const dbUser = await prisma.user.findUnique({
         where: { id: decoded.userId },
-        select: { id: true },
+        select: {id: true},
       });
 
       if (dbUser) {
@@ -49,7 +51,7 @@ export async function createGraphQLContext(req: NextRequest): Promise<GraphQLCon
       // Find the API key by its hash
       const apiKey = await prisma.apiKey.findUnique({
         where: { keyHash },
-        select: { id: true, userId: true, revokedAt: true, expiresAt: true },
+        select: {id: true, userId: true, revokedAt: true, expiresAt: true},
       });
 
       if (!apiKey) {
@@ -72,10 +74,21 @@ export async function createGraphQLContext(req: NextRequest): Promise<GraphQLCon
     }
   }
 
+  const isAuthenticated = !!userId;
+
+  // Apply rate limiting: higher tier for authenticated profile actions,
+  // stricter limits for unauthenticated endpoint structures.
+  const rateLimit = await checkRateLimit(req, {
+    userId,
+    apiKeyId,
+    isAuthenticated,
+  });
+
   return {
     req,
     userId,
     apiKeyId,
-    isAuthenticated: !!userId,
+    isAuthenticated,
+    rateLimit,
   };
 }

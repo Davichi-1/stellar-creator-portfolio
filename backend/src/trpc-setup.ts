@@ -18,6 +18,7 @@ import { ZodError } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { tracingMiddleware } from '@/backend/services/tracing';
 import { CircuitOpenError } from '@/services/api/stellar/client';
+import { rateLimitMiddleware } from '@/backend/src/rateLimit';
 import jwt from 'jsonwebtoken';
 
 // ─── Context Creation ─────────────────────────────────────────────────────────
@@ -151,6 +152,26 @@ const circuitBreakerMw = t.middleware(async ({ ctx, next }) => {
   }
 });
 
+/**
+ * Rate limiting middleware.
+ *
+ * Applies tiered limits based on authentication state:
+ *   - Unauthenticated requests: strict limit (e.g. 30 req/min per IP)
+ *   - Authenticated requests: higher-tier limit (e.g. 300 req/min per user)
+ *
+ * The actual limiter implementation (Redis vs in-memory) is selected at
+ * runtime by `rateLimitMiddleware` based on deployment topology.
+ */
+const rateLimitMw = t.middleware(async ({ ctx, next, path }) => {
+  await rateLimitMiddleware({
+    req: ctx.req,
+    headers: ctx.headers,
+    user: ctx.user,
+    path,
+  });
+  return next();
+});
+
 // ─── Base Procedures ──────────────────────────────────────────────────────────
 
 export const router = t.router;
@@ -158,10 +179,12 @@ export const router = t.router;
 // Every public procedure: tracing → circuit breaker
 export const publicProcedure = t.procedure
   .use(tracingMw)
-  .use(circuitBreakerMw);
+  .use(circuitBreakerMw)
+  .use(rateLimitMw);
 
-// Every protected procedure: tracing → circuit breaker → auth
+// Every protected procedure: tracing → circuit breaker → rate limit → auth
 export const protectedProcedure = t.procedure
   .use(tracingMw)
   .use(circuitBreakerMw)
+  .use(rateLimitMw)
   .use(authMiddleware);
