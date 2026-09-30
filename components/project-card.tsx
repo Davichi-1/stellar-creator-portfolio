@@ -2,6 +2,7 @@
 
 import { Project } from '@/lib/services/creators-data';
 import { ExternalLink } from 'lucide-react';
+import { richTextToPlainText } from '@/lib/rich-text/sanitize';
 
 interface ProjectCardProps {
   project: Project;
@@ -37,7 +38,9 @@ export function ProjectCard({ project }: ProjectCardProps) {
 
         {/* Description */}
         <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
-          {project.description}
+          {project.description.startsWith('<')
+            ? richTextToPlainText(project.description)
+            : project.description}
         </p>
 
         {/* Tags */}

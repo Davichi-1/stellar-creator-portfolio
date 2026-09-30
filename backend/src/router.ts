@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { protectedProcedure, publicProcedure, router } from './trpc-setup';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
+import { TRPCError } from '@trpc/server';
+import { sanitizeRichText, hasRichTextContent } from '@/lib/rich-text/sanitize';
 
 // Root router with Prisma-backed queries
 export const appRouter = router({
@@ -318,9 +320,16 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        // Never trust client-sanitized HTML: sanitize again before persisting.
+        const description = sanitizeRichText(input.description);
+        if (!hasRichTextContent(description)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Project details cannot be empty.' });
+        }
+
         return await prisma.project.create({
           data: {
             ...input,
+            description,
             creatorId: ctx.user!.id,
           },
         });
