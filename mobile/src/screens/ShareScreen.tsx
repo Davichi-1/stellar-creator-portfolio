@@ -17,7 +17,6 @@
 import React, { useCallback, useState } from 'react';
 import {
   Alert,
-  Clipboard,
   Platform,
   Pressable,
   SafeAreaView,
@@ -28,6 +27,7 @@ import {
   View,
 } from 'react-native';
 import * as ExpoSharing from 'expo-sharing';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { ShareOptionRow } from '../components/share/ShareOptionRow';
 import { Badge } from '../components/ui/Badge';

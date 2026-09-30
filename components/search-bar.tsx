@@ -14,6 +14,12 @@ interface SearchBarProps {
   showSuggestions?: boolean;
 }
 
+/**
+ * Debounced search input. Calls `onSearchChange` (if provided) `debounceMs`
+ * after the user stops typing, and `onSearch` on explicit submit (Enter or
+ * the search button). `showSuggestions` toggles an optional suggestions list
+ * driven by the `suggestions` state below.
+ */
 export function SearchBar({
   placeholder = 'Search creators, bounties, or projects...',
   onSearch,

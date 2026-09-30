@@ -12,7 +12,7 @@
  *                       via signature still happens later, at actual payout time.)
  *
  * Performance:
- *  - Step views rendered with translateX (native driver) — zero JS-thread cost
+ *  - Only the active step is mounted, so off-screen fields are not laid out
  *  - Skill chips are React.memo'd
  *  - All callbacks memoized
  *
@@ -22,9 +22,8 @@
  *    proven separately, by a real wallet connection, when a payment is signed)
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
-  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -231,7 +230,6 @@ export function RegisterScreen({
   onSignIn?: () => void;
 }) {
   const { colors, isDark } = useTheme();
-  const slideAnim = useRef(new Animated.Value(0)).current;
 
   const handleFormComplete = useCallback(
     async (_profile: ProfileFields, _discipline: DisciplineFields) => {
@@ -260,16 +258,6 @@ export function RegisterScreen({
 
   const [walletAddress, setWalletAddress] = useState("");
   const [walletAddressError, setWalletAddressError] = useState<string | null>(null);
-
-  // Animate slide when step changes
-  useEffect(() => {
-    Animated.spring(slideAnim, {
-      toValue: -(step - 1),
-      useNativeDriver: true,
-      bounciness: 0,
-      speed: 20,
-    }).start();
-  }, [step, slideAnim]);
 
   const handleNext1 = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -405,13 +393,15 @@ export function RegisterScreen({
 
               <Pressable
                 onPress={handleNext1}
+                disabled={!isProfileValid}
                 style={({ pressed }) => [
                   styles.primaryBtn,
                   { backgroundColor: isProfileValid ? colors.primary : colors.border },
-                  pressed && { opacity: 0.85 },
+                  pressed && isProfileValid && { opacity: 0.85 },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel="Continue to step 2"
+                accessibilityState={{ disabled: !isProfileValid }}
               >
                 <Text style={styles.primaryBtnText}>Continue</Text>
               </Pressable>
@@ -483,13 +473,15 @@ export function RegisterScreen({
 
               <Pressable
                 onPress={handleNext2}
+                disabled={!isDisciplineValid}
                 style={({ pressed }) => [
                   styles.primaryBtn,
                   { backgroundColor: isDisciplineValid ? colors.primary : colors.border },
-                  pressed && { opacity: 0.85 },
+                  pressed && isDisciplineValid && { opacity: 0.85 },
                 ]}
                 accessibilityRole="button"
                 accessibilityLabel="Continue to wallet connect"
+                accessibilityState={{ disabled: !isDisciplineValid }}
               >
                 <Text style={styles.primaryBtnText}>Continue</Text>
               </Pressable>

@@ -1,11 +1,9 @@
 import {
-  Address,
   Contract,
+  Transaction,
   TransactionBuilder,
-  xdr,
   scValToNative,
   nativeToScVal,
-  Account,
   rpc,
   TimeoutInfinite,
 } from '@stellar/stellar-sdk';
@@ -16,7 +14,7 @@ export class ContractService {
   /**
    * Reads contract data (view call)
    */
-  async getContractData(contractId: string, key: string): Promise<any> {
+  async getContractData<T = unknown>(contractId: string, key: string): Promise<T | null> {
     const contract = new Contract(contractId);
     const result = await stellarClient.rpc.getContractData(
       contract.address(),
@@ -28,7 +26,10 @@ export class ContractService {
       return null;
     }
 
-    return scValToNative(result.val as xdr.ScVal);
+    // result.val is a LedgerEntryData union (account, trustline, contract
+    // data, ...), not an ScVal itself - the actual stored value is nested
+    // under its contractData() variant.
+    return scValToNative(result.val.contractData().val()) as T;
   }
 
   /**
@@ -37,7 +38,7 @@ export class ContractService {
   async invokeContractMethod(
     contractId: string,
     method: string,
-    args: any[],
+    args: unknown[],
     signer: Signer
   ): Promise<string> {
     const rpcServer = stellarClient.rpc;
@@ -49,9 +50,12 @@ export class ContractService {
     const sourceAccount = await rpcServer.getAccount(sourcePublicKey);
 
     // 2. Build the initial transaction
+    // rpcServer.getAccount() already returns a fully-formed Account instance
+    // (accountId + sequence number) - use it directly rather than
+    // re-wrapping it.
     const call = contract.call(method, ...args.map((arg) => nativeToScVal(arg)));
-    let tx = new TransactionBuilder(
-      new Account(sourcePublicKey, sourceAccount.sequence),
+    let tx: Transaction = new TransactionBuilder(
+      sourceAccount,
       {
         fee: '100',
         networkPassphrase,
@@ -71,7 +75,7 @@ export class ContractService {
     tx = rpc.assembleTransaction(tx, simulation).build();
 
     // 5. Sign the transaction
-    tx = (await signer.signTransaction(tx as any)) as any;
+    tx = await signer.signTransaction(tx);
 
     // 6. Submit the transaction
     const response = await rpcServer.sendTransaction(tx);
@@ -80,12 +84,12 @@ export class ContractService {
     }
 
     // 7. Poll for status
+    // This SDK version's GetTransactionStatus only has SUCCESS, FAILED, and
+    // NOT_FOUND - a submitted-but-not-yet-included transaction reads back as
+    // NOT_FOUND (there's no separate PENDING status), so that's the only
+    // "still waiting" case to retry on.
     let statusResponse = await rpcServer.getTransaction(response.hash);
-    while (
-      statusResponse.status === rpc.Api.GetTransactionStatus.NOT_FOUND ||
-      statusResponse.status === rpc.Api.GetTransactionStatus.PENDING
-    ) {
-      // If pending or not found yet, wait and retry
+    while (statusResponse.status === rpc.Api.GetTransactionStatus.NOT_FOUND) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       statusResponse = await rpcServer.getTransaction(response.hash);
     }
@@ -98,7 +102,7 @@ export class ContractService {
       throw new Error(`Transaction failed: ${JSON.stringify(statusResponse.resultXdr)}`);
     }
 
-    throw new Error(`Unknown transaction status: ${statusResponse.status}`);
+    throw new Error('Unreachable: exhausted all known transaction statuses');
   }
 }
 

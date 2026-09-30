@@ -27,16 +27,31 @@ export function NotificationSettingsScreen({ onBack }: NotificationSettingsScree
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         {onBack && (
-          <Pressable onPress={onBack} style={styles.backButton} accessibilityRole="button">
+          <Pressable
+            onPress={onBack}
+            style={styles.backButton}
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            accessibilityHint="Returns to the previous screen"
+          >
             <Text style={[styles.backText, { color: colors.primary }]}>← Back</Text>
           </Pressable>
         )}
-        <Text style={[styles.title, { color: colors.text }]}>Notifications</Text>
+        <Text style={[styles.title, { color: colors.text }]} accessibilityRole="header">
+          Notifications
+        </Text>
       </View>
 
       <View style={styles.content}>
         <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-          <Text style={styles.cardIcon}>🔔</Text>
+          <Text
+            style={styles.cardIcon}
+            accessible={false}
+            importantForAccessibility="no"
+            accessibilityElementsHidden
+          >
+            🔔
+          </Text>
           <Text style={[styles.cardTitle, { color: colors.text }]}>Push Notifications</Text>
 
           {notificationPermission === 'granted' && (
@@ -57,6 +72,8 @@ export function NotificationSettingsScreen({ onBack }: NotificationSettingsScree
                 style={[styles.button, { backgroundColor: colors.primary }]}
                 onPress={openOSSettings}
                 accessibilityRole="button"
+                accessibilityLabel="Open device settings"
+                accessibilityHint="Opens your device settings so you can enable notifications"
               >
                 <Text style={styles.buttonText}>Open Device Settings</Text>
               </Pressable>

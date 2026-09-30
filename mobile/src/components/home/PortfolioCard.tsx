@@ -15,7 +15,10 @@ interface PortfolioCardProps {
   onPress: () => void;
 }
 
-export function PortfolioCard({ portfolio, onPress }: PortfolioCardProps) {
+export const PortfolioCard = React.memo(function PortfolioCard({
+  portfolio,
+  onPress,
+}: PortfolioCardProps) {
   const { colors } = useTheme();
 
   return (
@@ -37,8 +40,14 @@ export function PortfolioCard({ portfolio, onPress }: PortfolioCardProps) {
         <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
           {portfolio.title}
         </Text>
-        <Text style={[styles.score, { color: colors.success }]}>
-          +{portfolio.change}%
+        <Text
+          style={[
+            styles.score,
+            { color: portfolio.change < 0 ? colors.error : colors.success },
+          ]}
+        >
+          {portfolio.change > 0 ? "+" : ""}
+          {portfolio.change}%
         </Text>
       </View>
 
@@ -86,7 +95,7 @@ export function PortfolioCard({ portfolio, onPress }: PortfolioCardProps) {
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

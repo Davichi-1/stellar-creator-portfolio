@@ -35,17 +35,44 @@ to the actual deposit call.
 
 ## SEP-24 anchor flow
 
-**Status:** TODO-stubbed, not implemented.
+**Status:** implemented (Issue #1393).
 
-`components/features/sep24-flow.tsx` is a stub pending the actual SEP-24
-interactive deposit/withdraw API call. E2E test coverage is scoped now
-(rather than as a later follow-up) in `__tests__/sep24-flow.e2e.test.ts` as
-`it.todo` cases covering, at minimum:
+`lib/stellar/sep24.ts` holds the protocol client — TRANSFER_SERVER discovery
+from the anchor's `stellar.toml`, the interactive-URL request, and
+`/transaction` polling to a terminal status.
 
-1. Mocked-anchor happy path (interactive flow completes, transaction status
-   reaches `completed`).
-2. Failure / rejection path (anchor returns an error or the user is
-   redirected back with a rejected status).
+- `components/features/sep24-flow.tsx` runs the full flow client-side.
+- `components/sep24-flow.tsx` (the payment form) posts to
+  `POST /api/payments/sep24`, which performs the anchor handshake server-side.
 
-When implementing the real SEP-24 API call, fill in these test cases as part
-of the same PR — see `docs/BACKLOG.md` for why this is called out explicitly.
+The `it.todo` cases in `__tests__/sep24-flow.e2e.test.ts` are filled in, in the
+same PR as the implementation, as this note asked.
+
+### Notes for whoever picks this up next
+
+**SEP-10 is not wired.** `app/api/payments/sep24/route.ts` reads its JWT from
+`SEP24_AUTH_TOKEN` via `getSep10Token()`. SEP-10 is a challenge/response the
+*user's* key must sign, so the token has to come from wherever this deployment
+holds that authority — a wallet round-trip, a delegated signer, or a custodial
+service. With it unset the route answers 502 with a clear message rather than
+sending an unauthenticated request the anchor rejects less legibly. **Wire this
+before enabling SEP-24 in production.**
+
+**Terminal statuses are more than `completed` and `error`.** `refunded`,
+`expired`, `too_small`, `too_large` and `no_market` are terminal too. Treating
+only the obvious two as terminal is what leaves a flow polling forever on a
+transfer the anchor has already abandoned — there is a test for each.
+
+**Polling tolerates transient failures.** Three consecutive read failures give
+up; a single 502 does not, because an anchor briefly unavailable is not a failed
+transfer and abandoning a paid-in one is the worse error. A poll that exhausts
+its budget returns the last observed status rather than synthesising an error —
+"unresolved" and "rejected" need different things from the user.
+
+### Configuration
+
+```
+SEP24_ANCHOR_DOMAIN=testanchor.stellar.org   # TRANSFER_SERVER read from its stellar.toml
+SEP24_ASSET_CODE=USDC
+SEP24_AUTH_TOKEN=                            # temporary; see SEP-10 note above
+```

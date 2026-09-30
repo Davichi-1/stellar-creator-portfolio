@@ -5,7 +5,7 @@
  */
 
 import { useEffect } from 'react';
-import { errorTracker, initializeErrorTracking } from '@/lib/error-tracking';
+import { errorTracker, initializeErrorTracking, type ErrorContext } from '@/lib/error-tracking';
 
 /**
  * Initialize error tracking on app load
@@ -35,7 +35,7 @@ export function useSetErrorTrackingUser(userId?: string, userEmail?: string) {
  * Capture an error with context
  */
 export function useCaptureError() {
-  return (error: Error | string, context?: any) => {
+  return (error: Error | string, context?: ErrorContext) => {
     return errorTracker.captureError(error, context);
   };
 }

@@ -12,6 +12,12 @@
  *
  * Flags:
  *   --simulate-only  Run preflight simulations only; do not submit transactions.
+ *
+ * Mainnet guard:  refuses to deploy unless STELLAR_NETWORK=mainnet is explicit.
+ * Pre-release guard: refuses to deploy if GITHUB_REF_NAME contains a hyphen
+ *   (e.g. v1.0.0-rc.1) unless ALLOW_PRERELEASE=1 is set.
+ *
+ * Related: #1349
  */
 
 "use strict";
@@ -19,6 +25,8 @@
 const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const https = require("https");
+const http = require("http");
 
 // ---------------------------------------------------------------------------
 // Config
@@ -26,8 +34,8 @@ const path = require("path");
 
 const SIMULATE_ONLY = process.argv.includes("--simulate-only");
 
-const NETWORK = process.env.STELLAR_NETWORK;
-const RPC_URL = process.env.STELLAR_RPC_URL;
+const NETWORK    = process.env.STELLAR_NETWORK;
+const RPC_URL    = process.env.STELLAR_RPC_URL;
 const PASSPHRASE = process.env.STELLAR_NETWORK_PASSPHRASE;
 const ADMIN_SECRET = process.env.STELLAR_ADMIN_SECRET;
 
@@ -42,20 +50,54 @@ if (!RPC_URL) {
   process.exit(1);
 }
 
+// Guard: refuse to deploy a pre-release tag to mainnet.
+const refName = process.env.GITHUB_REF_NAME || "";
+if (NETWORK === "mainnet" && !SIMULATE_ONLY && refName.includes("-") && process.env.ALLOW_PRERELEASE !== "1") {
+  console.error(`❌ Pre-release tag '${refName}' must not be deployed to Mainnet.`);
+  console.error("   Set ALLOW_PRERELEASE=1 to override (not recommended).");
+  process.exit(1);
+}
+
 // ---------------------------------------------------------------------------
 // Contracts to deploy (name → wasm path relative to repo root)
 // ---------------------------------------------------------------------------
 
 const WASM_DIR = process.env.WASM_DIR || "backend/target/wasm32-unknown-unknown/release";
 
+// Two build paths feed WASM_DIR to this script, and they name their output
+// files differently:
+//   - A direct `cargo build --package <name>` (deploy-contracts.yml,
+//     deploy-mainnet.yml's simulate-contracts job) produces cargo's package
+//     name with hyphens turned to underscores, e.g.
+//     stellar-bounty-contract -> stellar_bounty_contract.wasm.
+//   - The Docker-based reproducible build (scripts/build-reproducible.sh,
+//     used by deploy-mainnet.yml's deploy-contracts job via scripts/verify.sh)
+//     extracts and renames to short names, e.g. bounty.wasm.
+// Each contract below lists both candidate filenames; resolveWasm() picks
+// whichever actually exists so this script works from either build path
+// without the caller needing to know which one populated WASM_DIR. `oracle`
+// is the one package whose Cargo name has no `stellar-*-contract` prefix, so
+// both candidates are identical for it.
 const CONTRACTS = [
-  { name: "bounty",     wasm: `${WASM_DIR}/bounty.wasm`,     outputKey: "bounty_contract_id" },
-  { name: "escrow",     wasm: `${WASM_DIR}/escrow.wasm`,     outputKey: "escrow_contract_id" },
-  { name: "freelancer", wasm: `${WASM_DIR}/freelancer.wasm`, outputKey: "freelancer_contract_id" },
-  { name: "governance", wasm: `${WASM_DIR}/governance.wasm`, outputKey: "governance_contract_id" },
-  { name: "oracle",     wasm: `${WASM_DIR}/oracle.wasm`,     outputKey: "oracle_contract_id" },
-  { name: "identity",   wasm: `${WASM_DIR}/identity.wasm`,   outputKey: "identity_contract_id" },
+  { name: "bounty",     wasmCandidates: ["stellar_bounty_contract.wasm", "bounty.wasm"],         outputKey: "bounty_contract_id" },
+  { name: "escrow",     wasmCandidates: ["stellar_escrow_contract.wasm", "escrow.wasm"],          outputKey: "escrow_contract_id" },
+  { name: "freelancer", wasmCandidates: ["stellar_freelancer_contract.wasm", "freelancer.wasm"],  outputKey: "freelancer_contract_id" },
+  { name: "governance", wasmCandidates: ["stellar_governance_contract.wasm", "governance.wasm"],  outputKey: "governance_contract_id" },
+  { name: "oracle",     wasmCandidates: ["oracle.wasm"],                                          outputKey: "oracle_contract_id" },
+  { name: "identity",   wasmCandidates: ["stellar_identity_contract.wasm", "identity.wasm"],      outputKey: "identity_contract_id" },
 ];
+
+/** Resolves a contract's wasm file to whichever candidate filename actually
+ * exists in WASM_DIR. Throws with both attempted paths if neither does. */
+function resolveWasm(contract) {
+  for (const filename of contract.wasmCandidates) {
+    const candidate = path.resolve(WASM_DIR, filename);
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  const attempted = contract.wasmCandidates.map((f) => path.resolve(WASM_DIR, f)).join(", ");
+  console.error(`❌ No WASM found for ${contract.name}. Tried: ${attempted}`);
+  process.exit(1);
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -74,16 +116,58 @@ function setOutput(key, value) {
   console.log(`  → ${key}=${value}`);
 }
 
+/**
+ * Validate that the configured RPC endpoint is reachable and healthy before
+ * attempting any contract operations.  Exits 1 on failure so CI aborts early
+ * rather than spending minutes building contracts against a dead endpoint.
+ */
+async function validateRpcHealth(rpcUrl) {
+  console.log(`\n🔍 Validating Mainnet RPC health: ${rpcUrl}`);
+  const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "getHealth", params: [] });
+  const urlObj = new URL(rpcUrl);
+  const mod = urlObj.protocol === "https:" ? https : http;
+
+  return new Promise((resolve) => {
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (urlObj.protocol === "https:" ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) },
+      timeout: 10_000,
+    };
+    const req = mod.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.result) {
+            console.log(`  ✅ RPC is healthy (status: ${JSON.stringify(json.result)})`);
+            resolve(true);
+          } else {
+            console.error(`  ❌ RPC health check returned unexpected response: ${data}`);
+            resolve(false);
+          }
+        } catch {
+          console.error(`  ❌ RPC health check failed to parse response: ${data}`);
+          resolve(false);
+        }
+      });
+    });
+    req.on("timeout", () => { req.destroy(); console.error("  ❌ RPC health check timed out"); resolve(false); });
+    req.on("error", (e) => { console.error(`  ❌ RPC health check error: ${e.message}`); resolve(false); });
+    req.write(body);
+    req.end();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Simulate: preflight each contract upload against the RPC
 // ---------------------------------------------------------------------------
 
 function simulateContract(contract) {
-  const wasmPath = path.resolve(contract.wasm);
-  if (!fs.existsSync(wasmPath)) {
-    console.error(`❌ WASM not found: ${wasmPath}`);
-    process.exit(1);
-  }
+  const wasmPath = resolveWasm(contract);
 
   console.log(`  Simulating ${contract.name}…`);
   // stellar contract upload --simulate validates the wasm against the RPC
@@ -103,11 +187,7 @@ function simulateContract(contract) {
 // ---------------------------------------------------------------------------
 
 function deployContract(contract) {
-  const wasmPath = path.resolve(contract.wasm);
-  if (!fs.existsSync(wasmPath)) {
-    console.error(`❌ WASM not found: ${wasmPath}`);
-    process.exit(1);
-  }
+  const wasmPath = resolveWasm(contract);
 
   console.log(`  Uploading ${contract.name}…`);
   const wasmHash = run(
@@ -135,32 +215,49 @@ function deployContract(contract) {
 // Main
 // ---------------------------------------------------------------------------
 
-console.log(`\n🚀 Stellar Contract ${SIMULATE_ONLY ? "Simulation" : "Deployment"}`);
-console.log(`   Network : ${NETWORK ?? "(not set)"}`);
-console.log(`   RPC     : ${RPC_URL}`);
-console.log(`   Mode    : ${SIMULATE_ONLY ? "simulate-only" : "deploy"}\n`);
+async function main() {
+  console.log(`\n🚀 Stellar Contract ${SIMULATE_ONLY ? "Simulation" : "Deployment"}`);
+  console.log(`   Network : ${NETWORK ?? "(not set)"}`);
+  console.log(`   RPC     : ${RPC_URL}`);
+  console.log(`   Mode    : ${SIMULATE_ONLY ? "simulate-only" : "deploy"}\n`);
 
-const deployedContracts = {};
-
-for (const contract of CONTRACTS) {
-  if (SIMULATE_ONLY) {
-    simulateContract(contract);
-  } else {
-    const contractId = deployContract(contract);
-    deployedContracts[contract.name] = contractId;
+  // Validate RPC health before spending time on builds/deploys.
+  if (NETWORK === "mainnet") {
+    const healthy = await validateRpcHealth(RPC_URL);
+    if (!healthy) {
+      console.error("\n❌ Mainnet RPC validation failed. Aborting deploy.");
+      process.exit(1);
+    }
   }
+
+  const deployedContracts = {};
+
+  for (const contract of CONTRACTS) {
+    if (SIMULATE_ONLY) {
+      simulateContract(contract);
+    } else {
+      const contractId = deployContract(contract);
+      deployedContracts[contract.name] = contractId;
+    }
+  }
+
+  if (!SIMULATE_ONLY && Object.keys(deployedContracts).length > 0) {
+    const contractsJson = {
+      network: NETWORK,
+      timestamp: new Date().toISOString(),
+      commit: process.env.GITHUB_SHA || "local",
+      tag: process.env.GITHUB_REF_NAME || "local",
+      contracts: deployedContracts,
+    };
+    const outPath = path.resolve("contracts.json");
+    fs.writeFileSync(outPath, JSON.stringify(contractsJson, null, 2) + "\n");
+    console.log(`\n📄 Contract IDs written to ${outPath}`);
+  }
+
+  console.log(`\n✅ All contracts ${SIMULATE_ONLY ? "simulated" : "deployed"} successfully.\n`);
 }
 
-if (!SIMULATE_ONLY && Object.keys(deployedContracts).length > 0) {
-  const contractsJson = {
-    network: NETWORK,
-    timestamp: new Date().toISOString(),
-    commit: process.env.GITHUB_SHA || "local",
-    contracts: deployedContracts,
-  };
-  const outPath = path.resolve("contracts.json");
-  fs.writeFileSync(outPath, JSON.stringify(contractsJson, null, 2) + "\n");
-  console.log(`\n📄 Contract IDs written to ${outPath}`);
-}
-
-console.log(`\n✅ All contracts ${SIMULATE_ONLY ? "simulated" : "deployed"} successfully.\n`);
+main().catch((err) => {
+  console.error("❌ Unexpected error:", err.message ?? err);
+  process.exit(1);
+});

@@ -27,6 +27,11 @@ export interface AuthenticatedRequest extends Request {
   requestId?: string;
 }
 
+export interface JwtUserPayload extends jwt.JwtPayload {
+  id?: string;
+  email?: string;
+}
+
 /**
  * API Key Manager
  */
@@ -159,9 +164,14 @@ export function apiKeyAuthentication(
     const token = authHeader.substring(7);
     try {
       const jwtSecret = process.env.JWT_SECRET || "your-secret-key";
-      const decoded = jwt.verify(token, jwtSecret) as any;
+      const decoded = jwt.verify(token, jwtSecret) as JwtUserPayload | string;
 
-      if (!decoded || !decoded.id || !decoded.email) {
+      if (
+        !decoded ||
+        typeof decoded === "string" ||
+        typeof decoded.id !== "string" ||
+        typeof decoded.email !== "string"
+      ) {
         return res.status(401).json({ error: "Invalid token claims" });
       }
 
@@ -188,7 +198,7 @@ export interface ValidationSchema {
     min?: number;
     max?: number;
     pattern?: RegExp;
-    enum?: any[];
+    enum?: (string | number | boolean)[];
     items?: ValidationSchema;
     properties?: ValidationSchema;
   };
@@ -258,10 +268,14 @@ export class InputValidator {
    * Validate input against schema
    */
   static validate(
-    data: any,
+    data: Record<string, unknown> | null | undefined,
     schema: ValidationSchema,
   ): { valid: boolean; errors: string[] } {
     const errors: string[] = [];
+
+    if (!data || typeof data !== "object") {
+      return { valid: false, errors: ["Input data must be an object"] };
+    }
 
     for (const [field, rules] of Object.entries(schema)) {
       const value = data[field];
@@ -283,7 +297,7 @@ export class InputValidator {
       }
 
       // Validate string
-      if (rules.type === "string") {
+      if (rules.type === "string" && typeof value === "string") {
         if (rules.minLength && value.length < rules.minLength) {
           errors.push(
             `${field} must have at least ${rules.minLength} characters`,
@@ -303,7 +317,7 @@ export class InputValidator {
       }
 
       // Validate number
-      if (rules.type === "number") {
+      if (rules.type === "number" && typeof value === "number") {
         if (rules.min !== undefined && value < rules.min) {
           errors.push(`${field} must be at least ${rules.min}`);
         }
@@ -314,7 +328,7 @@ export class InputValidator {
 
       // Validate array
       if (rules.type === "array" && Array.isArray(value)) {
-        if (rules.items && rules.items && typeof rules.items === "object") {
+        if (rules.items && typeof rules.items === "object") {
           for (const item of value) {
             const itemResult = this.validate({ item }, { item: rules.items });
             if (!itemResult.valid) {

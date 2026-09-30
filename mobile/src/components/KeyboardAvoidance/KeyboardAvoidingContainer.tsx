@@ -6,6 +6,8 @@
  * The native KeyboardAvoidingView has been intentionally removed to avoid
  * double-compensation on iOS (both mechanisms react to the same keyboard
  * event and would shift content up by ~2× the keyboard height).
+ *
+ * Updated for Issue #798: Precise keyboard avoidance with safe area handling.
  */
 
 import React, { useMemo } from 'react';
@@ -19,22 +21,39 @@ import { useKeyboardAvoidance } from '../../hooks/useKeyboardAvoidance';
 interface KeyboardAvoidingContainerProps extends ViewProps {
   children: React.ReactNode;
   offset?: number;
+  safeArea?: boolean;
+  topOffset?: number;
+  avoidKeyboard?: boolean;
 }
 
 export const KeyboardAvoidingContainer: React.FC<KeyboardAvoidingContainerProps> = ({
   children,
   offset = 20,
+  safeArea = true,
+  topOffset = 0,
+  avoidKeyboard = true,
   style,
   ...props
 }) => {
-  const { animatedValue } = useKeyboardAvoidance();
+  const { animatedValue, height } = useKeyboardAvoidance({
+    bottomOffset: offset,
+    safeAreaEnabled: safeArea,
+  });
 
   const animatedStyle = useMemo(
     () => ({
-      transform: [{ translateY: animatedValue }],
+      transform: [{ translateY: avoidKeyboard ? -height : topOffset }],
     }),
-    [animatedValue],
+    [avoidKeyboard, height, topOffset],
   );
+
+  if (!avoidKeyboard) {
+    return (
+      <View style={[styles.container, style]} {...props}>
+        {children}
+      </View>
+    );
+  }
 
   return (
     <Animated.View

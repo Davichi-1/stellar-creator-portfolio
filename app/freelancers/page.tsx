@@ -53,9 +53,14 @@ export default function FreelancersPage() {
             {/* Search Bar */}
             <div className="max-w-2xl mx-auto mb-8">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" size={20} />
+                <Search
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  size={20}
+                  aria-hidden="true"
+                />
                 <input
-                  type="text"
+                  type="search"
+                  aria-label="Search freelancers by name, skills, or expertise"
                   placeholder="Search by name, skills, or expertise..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -71,11 +76,15 @@ export default function FreelancersPage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* Filters */}
             <div className="mb-12 pb-8 border-b border-border">
-              <h3 className="text-lg font-semibold text-foreground mb-4">Filter by Discipline</h3>
-              <div className="flex flex-wrap gap-2">
+              <h3 id="discipline-filter-heading" className="text-lg font-semibold text-foreground mb-4">
+                Filter by Discipline
+              </h3>
+              <div className="flex flex-wrap gap-2" role="group" aria-labelledby="discipline-filter-heading">
                 {disciplines.map((discipline) => (
                   <button
                     key={discipline}
+                    type="button"
+                    aria-pressed={selectedDiscipline === discipline}
                     onClick={() => setSelectedDiscipline(discipline)}
                     className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ease-out ${
                       selectedDiscipline === discipline
@@ -92,7 +101,7 @@ export default function FreelancersPage() {
             {/* Results */}
             <div>
               {!isLoading && (
-                <p className="text-sm text-muted-foreground mb-8">
+                <p className="text-sm text-muted-foreground mb-8" aria-live="polite">
                   Showing {filteredCreators.length} freelancer{filteredCreators.length !== 1 ? 's' : ''}
                 </p>
               )}
@@ -198,7 +207,7 @@ export default function FreelancersPage() {
                 return (
                   <div key={index} className="bg-card border border-border rounded-lg p-8 hover:shadow-lg transition-all">
                     <div className="w-12 h-12 bg-primary/20 rounded-lg flex items-center justify-center mb-4">
-                      <Icon size={24} className="text-primary" />
+                      <Icon size={24} className="text-primary" aria-hidden="true" />
                     </div>
                     <h3 className="text-lg font-bold text-foreground mb-2">{feature.title}</h3>
                     <p className="text-muted-foreground">{feature.description}</p>
@@ -221,7 +230,11 @@ export default function FreelancersPage() {
             <Link href="/bounties">
               <Button size="lg" className="group">
                 Post a Project
-                <ArrowRight size={18} className="ml-2 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight
+                  size={18}
+                  className="ml-2 group-hover:translate-x-1 transition-transform"
+                  aria-hidden="true"
+                />
               </Button>
             </Link>
           </div>

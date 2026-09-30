@@ -22,6 +22,23 @@ const en = {
     hoursAgo: '{{count}}h ago',
     daysAgo: '{{count}}d ago',
   },
+
+  validation: {
+    required: 'This field is required',
+    email: 'Please enter a valid email address',
+    minLength: 'Minimum {{min}} characters required',
+    maxLength: 'Maximum {{max}} characters allowed',
+    pattern: 'Invalid format',
+    password:
+      'Password must be at least 8 characters with uppercase, lowercase, number, and special character',
+    phone: 'Please enter a valid phone number',
+    url: 'Please enter a valid URL',
+    numeric: 'Please enter a valid number',
+    range: 'Value must be between {{min}} and {{max}}',
+    match: 'Values do not match',
+    stellarAddress: 'Please enter a valid Stellar address',
+    username: 'Username can only contain letters, numbers, underscores, and hyphens',
+  },
   nav: {
     home: 'Home',
     creators: 'Creators',
@@ -112,6 +129,8 @@ const en = {
     summaryTotal: 'Total events',
     summaryEarnings: 'Earnings',
     summaryBounties: 'Bounties',
+    loading: 'Loading activity…',
+    refresh: 'Refresh',
   },
   share: {
     screenTitle: 'Share',
@@ -119,10 +138,14 @@ const en = {
     shareBounty: 'Share Bounty',
     shareReview: 'Share Review',
     shareAchievement: 'Share Achievement',
+    sharePortfolio: 'Share Portfolio',
+    shareLink: 'Share Link',
     shareMessage: 'Check out {{name}} on Tamgora — the creator marketplace!',
     shareBountyMessage: 'Check out this bounty on Tamgora: {{title}}',
     shareReviewMessage: 'I just reviewed {{name}} on Tamgora',
     shareAchievementMessage: 'I just earned the {{achievement}} badge on Tamgora!',
+    sharePortfolioMessage: 'Check out this portfolio on Tamgora: {{title}}',
+    shareLinkMessage: 'Check out {{title}} on Tamgora: {{url}}',
     copyLink: 'Copy Link',
     linkCopied: 'Link copied to clipboard',
     shareVia: 'Share via…',
@@ -138,6 +161,17 @@ const en = {
     generating: 'Generating share link…',
     profileUrl: 'Profile URL',
     bountyUrl: 'Bounty URL',
+    selectEndpoint: 'Share to…',
+    searchEndpoints: 'Search endpoints...',
+    noResults: 'No endpoints found',
+    noEndpoints: 'No share endpoints available',
+    preview: 'Preview',
+    endpointType: {
+      social: 'Social',
+      messaging: 'Messaging',
+      email: 'Email',
+      system: 'System',
+    },
   },
   chat: {
     typeMessage: 'Type a message…',
@@ -175,6 +209,81 @@ const en = {
     version: 'Version {{version}}',
     languageChanged: 'Language updated to {{language}}',
     rtlNote: 'Right-to-left layout enabled',
+    
+    // Preferences
+    preferencesTitle: 'Preferences',
+    preferencesSubtitle: 'Customize your experience',
+    
+    // Appearance
+    appearanceSection: 'Appearance',
+    darkMode: 'Dark Mode',
+    darkModeDescription: 'Always use dark theme',
+    systemTheme: 'System Theme',
+    systemThemeDescription: 'Match device settings',
+    largerText: 'Larger Text',
+    largerTextDescription: 'Increase font size for better readability',
+    highContrast: 'High Contrast',
+    highContrastDescription: 'Enhance color contrast for visibility',
+    
+    // Notifications
+    notificationsSection: 'Notifications',
+    pushNotifications: 'Push Notifications',
+    pushNotificationsDescription: 'Receive push alerts for messages and updates',
+    notificationLevel: 'Notification Level',
+    notificationLevelDescription: 'Control which notifications you receive',
+    vibration: 'Vibration',
+    vibrationDescription: 'Enable haptic feedback for notifications',
+    sound: 'Sound',
+    soundDescription: 'Play sounds for incoming notifications',
+    
+    // Privacy
+    privacySection: 'Privacy',
+    profileVisibility: 'Profile Visibility',
+    profileVisibilityDescription: 'Show your profile to non-contacts',
+    lastSeen: 'Last Seen',
+    lastSeenDescription: 'Show when you were last active',
+    screenRecording: 'Screen Recording Protection',
+    screenRecordingDescription: 'Block screenshots and screen recording',
+    
+    // Data & Storage
+    dataSection: 'Data & Storage',
+    dataUsage: 'Data Usage Mode',
+    dataUsageDescription: 'Control data consumption',
+    autoDownload: 'Auto-download Media',
+    autoDownloadDescription: 'Automatically download images and videos',
+    clearCache: 'Clear Cache on Exit',
+    clearCacheDescription: 'Remove cached data when closing the app',
+    
+    // Features
+    featuresSection: 'Features',
+    biometricAuth: 'Biometric Authentication',
+    biometricAuthDescription: 'Use Face ID or Touch ID for secure access',
+    autoDarkSwitch: 'Auto Dark Mode',
+    autoDarkSwitchDescription: 'Automatically switch based on time of day',
+    
+    // Data usage options
+    dataStandard: 'Standard',
+    dataStandardDescription: 'Normal data usage (default)',
+    dataLow: 'Low',
+    dataLowDescription: 'Reduce data consumption',
+    dataEconomy: 'Economy',
+    dataEconomyDescription: 'Minimal data usage',
+    
+    // Notification levels
+    levelNone: 'None',
+    levelNoneDescription: 'Disable all notifications',
+    levelCritical: 'Critical Only',
+    levelCriticalDescription: 'Only critical alerts',
+    levelImportant: 'Important',
+    levelImportantDescription: 'Important and critical alerts',
+    levelAll: 'All',
+    levelAllDescription: 'All notifications',
+    
+    // Buttons
+    resetPreferences: 'Reset Preferences',
+    resetPreferencesConfirm: 'Reset all preferences to default?',
+    resetComplete: 'Preferences reset successfully',
+    resetError: 'Failed to reset preferences',
   },
   home: {
     greeting: 'Hello, Tamgora Creator',

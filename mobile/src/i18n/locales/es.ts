@@ -21,6 +21,23 @@ const es = {
     hoursAgo: 'hace {{count}}h',
     daysAgo: 'hace {{count}}d',
   },
+
+  validation: {
+    required: 'Este campo es obligatorio',
+    email: 'Introduce una dirección de correo válida',
+    minLength: 'Se requieren al menos {{min}} caracteres',
+    maxLength: 'Se permiten como máximo {{max}} caracteres',
+    pattern: 'Formato no válido',
+    password:
+      'La contraseña debe tener al menos 8 caracteres con mayúscula, minúscula, número y carácter especial',
+    phone: 'Introduce un número de teléfono válido',
+    url: 'Introduce una URL válida',
+    numeric: 'Introduce un número válido',
+    range: 'El valor debe estar entre {{min}} y {{max}}',
+    match: 'Los valores no coinciden',
+    stellarAddress: 'Introduce una dirección de Stellar válida',
+    username: 'El nombre de usuario solo puede contener letras, números, guiones bajos y guiones',
+  },
   nav: {
     home: 'Inicio',
     creators: 'Creadores',
@@ -111,6 +128,8 @@ const es = {
     summaryTotal: 'Total de eventos',
     summaryEarnings: 'Ganancias',
     summaryBounties: 'Recompensas',
+    loading: 'Cargando actividad…',
+    refresh: 'Actualizar',
   },
   share: {
     screenTitle: 'Compartir',
@@ -118,10 +137,14 @@ const es = {
     shareBounty: 'Compartir Recompensa',
     shareReview: 'Compartir Reseña',
     shareAchievement: 'Compartir Logro',
+    sharePortfolio: 'Compartir Portafolio',
+    shareLink: 'Compartir Enlace',
     shareMessage: '¡Mira a {{name}} en Tamgora — el mercado de creadores!',
     shareBountyMessage: 'Mira esta recompensa en Tamgora: {{title}}',
     shareReviewMessage: 'Acabo de reseñar a {{name}} en Tamgora',
     shareAchievementMessage: '¡Acabo de ganar la insignia {{achievement}} en Tamgora!',
+    sharePortfolioMessage: '¡Mira este portafolio en Tamgora: {{title}}',
+    shareLinkMessage: 'Mira {{title}} en Tamgora: {{url}}',
     copyLink: 'Copiar Enlace',
     linkCopied: 'Enlace copiado al portapapeles',
     shareVia: 'Compartir vía…',
@@ -137,6 +160,17 @@ const es = {
     generating: 'Generando enlace…',
     profileUrl: 'URL del Perfil',
     bountyUrl: 'URL de la Recompensa',
+    selectEndpoint: 'Compartir a…',
+    searchEndpoints: 'Buscar endpoints...',
+    noResults: 'No se encontraron endpoints',
+    noEndpoints: 'No hay endpoints de compartir disponibles',
+    preview: 'Vista previa',
+    endpointType: {
+      social: 'Social',
+      messaging: 'Mensajería',
+      email: 'Email',
+      system: 'Sistema',
+    },
   },
   chat: {
     typeMessage: 'Escribe un mensaje…',
@@ -174,6 +208,81 @@ const es = {
     version: 'Versión {{version}}',
     languageChanged: 'Idioma actualizado a {{language}}',
     rtlNote: 'Diseño de derecha a izquierda activado',
+    
+    // Preferences
+    preferencesTitle: 'Preferencias',
+    preferencesSubtitle: 'Personaliza tu experiencia',
+    
+    // Appearance
+    appearanceSection: 'Apariencia',
+    darkMode: 'Modo Oscuro',
+    darkModeDescription: 'Usar siempre tema oscuro',
+    systemTheme: 'Tema del Sistema',
+    systemThemeDescription: 'Coincidir con los ajustes del dispositivo',
+    largerText: 'Texto Más Grande',
+    largerTextDescription: 'Aumentar el tamaño de fuente para mejor legibilidad',
+    highContrast: 'Alto Contraste',
+    highContrastDescription: 'Mejorar el contraste de colores para visibilidad',
+    
+    // Notifications
+    notificationsSection: 'Notificaciones',
+    pushNotifications: 'Notificaciones Push',
+    pushNotificationsDescription: 'Recibir alertas push para mensajes y actualizaciones',
+    notificationLevel: 'Nivel de Notificación',
+    notificationLevelDescription: 'Controlar qué notificaciones recibes',
+    vibration: 'Vibración',
+    vibrationDescription: 'Activar retroalimentación háptica para notificaciones',
+    sound: 'Sonido',
+    soundDescription: 'Reproducir sonidos para notificaciones entrantes',
+    
+    // Privacy
+    privacySection: 'Privacidad',
+    profileVisibility: 'Visibilidad del Perfil',
+    profileVisibilityDescription: 'Mostrar tu perfil a no contactos',
+    lastSeen: 'Última Vez visto',
+    lastSeenDescription: 'Mostrar cuándo estuviste activo por última vez',
+    screenRecording: 'Protección de Grabación de Pantalla',
+    screenRecordingDescription: 'Bloquear capturas de pantalla y grabación de pantalla',
+    
+    // Data & Storage
+    dataSection: 'Datos y Almacenamiento',
+    dataUsage: 'Modo de Uso de Datos',
+    dataUsageDescription: 'Controlar el consumo de datos',
+    autoDownload: 'Descarga Automática de Media',
+    autoDownloadDescription: 'Descargar automáticamente imágenes y videos',
+    clearCache: 'Borrar Caché al Salir',
+    clearCacheDescription: 'Eliminar datos en caché al cerrar la aplicación',
+    
+    // Features
+    featuresSection: 'Características',
+    biometricAuth: 'Autenticación Biométrica',
+    biometricAuthDescription: 'Usar Face ID o Touch ID para acceso seguro',
+    autoDarkSwitch: 'Modo Oscuro Automático',
+    autoDarkSwitchDescription: 'Cambiar automáticamente según la hora del día',
+    
+    // Data usage options
+    dataStandard: 'Estándar',
+    dataStandardDescription: 'Uso normal de datos (predeterminado)',
+    dataLow: 'Bajo',
+    dataLowDescription: 'Reducir consumo de datos',
+    dataEconomy: 'Economía',
+    dataEconomyDescription: 'Uso mínimo de datos',
+    
+    // Notification levels
+    levelNone: 'Ninguno',
+    levelNoneDescription: 'Desactivar todas las notificaciones',
+    levelCritical: 'Solo Crítico',
+    levelCriticalDescription: 'Solo alertas críticas',
+    levelImportant: 'Importante',
+    levelImportantDescription: 'Alertas importantes y críticas',
+    levelAll: 'Todo',
+    levelAllDescription: 'Todas las notificaciones',
+    
+    // Buttons
+    resetPreferences: 'Restablecer Preferencias',
+    resetPreferencesConfirm: '¿Restablecer todas las preferencias a los valores predeterminados?',
+    resetComplete: 'Preferencias restablecidas con éxito',
+    resetError: 'Error al restablecer preferencias',
   },
   home: {
     greeting: 'Hola, creador de Tamgora',

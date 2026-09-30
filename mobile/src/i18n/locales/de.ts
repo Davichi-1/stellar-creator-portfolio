@@ -21,6 +21,23 @@ const de = {
     hoursAgo: 'vor {{count}} Std.',
     daysAgo: 'vor {{count}} Tagen',
   },
+
+  validation: {
+    required: 'Dieses Feld ist erforderlich',
+    email: 'Bitte gib eine gültige E-Mail-Adresse ein',
+    minLength: 'Mindestens {{min}} Zeichen erforderlich',
+    maxLength: 'Höchstens {{max}} Zeichen erlaubt',
+    pattern: 'Ungültiges Format',
+    password:
+      'Das Passwort muss mindestens 8 Zeichen enthalten, mit Groß- und Kleinbuchstabe, Zahl und Sonderzeichen',
+    phone: 'Bitte gib eine gültige Telefonnummer ein',
+    url: 'Bitte gib eine gültige URL ein',
+    numeric: 'Bitte gib eine gültige Zahl ein',
+    range: 'Der Wert muss zwischen {{min}} und {{max}} liegen',
+    match: 'Die Werte stimmen nicht überein',
+    stellarAddress: 'Bitte gib eine gültige Stellar-Adresse ein',
+    username: 'Der Benutzername darf nur Buchstaben, Zahlen, Unterstriche und Bindestriche enthalten',
+  },
   nav: {
     home: 'Startseite',
     creators: 'Ersteller',
@@ -111,6 +128,8 @@ const de = {
     summaryTotal: 'Ereignisse gesamt',
     summaryEarnings: 'Einnahmen',
     summaryBounties: 'Prämien',
+    loading: 'Aktivität wird geladen…',
+    refresh: 'Aktualisieren',
   },
   share: {
     screenTitle: 'Teilen',
@@ -118,10 +137,14 @@ const de = {
     shareBounty: 'Prämie teilen',
     shareReview: 'Rezension teilen',
     shareAchievement: 'Erfolg teilen',
+    sharePortfolio: 'Portfolio teilen',
+    shareLink: 'Link teilen',
     shareMessage: 'Entdecke {{name}} auf Tamgora — dem Ersteller-Marktplatz!',
     shareBountyMessage: 'Schau dir diese Prämie auf Tamgora an: {{title}}',
     shareReviewMessage: 'Ich habe gerade {{name}} auf Tamgora bewertet',
     shareAchievementMessage: 'Ich habe gerade das Abzeichen {{achievement}} auf Tamgora verdient!',
+    sharePortfolioMessage: 'Schau dir dieses Portfolio auf Tamgora an: {{title}}',
+    shareLinkMessage: 'Schau dir {{title}} auf Tamgora an: {{url}}',
     copyLink: 'Link kopieren',
     linkCopied: 'Link in die Zwischenablage kopiert',
     shareVia: 'Teilen über…',
@@ -137,6 +160,17 @@ const de = {
     generating: 'Link wird generiert…',
     profileUrl: 'Profil-URL',
     bountyUrl: 'Prämien-URL',
+    selectEndpoint: 'Teilen an…',
+    searchEndpoints: 'Endpoints suchen...',
+    noResults: 'Keine endpoints gefunden',
+    noEndpoints: 'Keine Teilen-endpoints verfügbar',
+    preview: 'Vorschau',
+    endpointType: {
+      social: 'Sozial',
+      messaging: 'Nachrichten',
+      email: 'Email',
+      system: 'System',
+    },
   },
   chat: {
     typeMessage: 'Nachricht eingeben…',
@@ -174,6 +208,81 @@ const de = {
     version: 'Version {{version}}',
     languageChanged: 'Sprache aktualisiert: {{language}}',
     rtlNote: 'Rechts-nach-links-Layout aktiviert',
+    
+    // Preferences
+    preferencesTitle: 'Einstellungen',
+    preferencesSubtitle: 'Passen Sie Ihre Erfahrung an',
+    
+    // Appearance
+    appearanceSection: 'Erscheinungsbild',
+    darkMode: 'Dunkler Modus',
+    darkModeDescription: 'Immer dunkles Design verwenden',
+    systemTheme: 'System-Design',
+    systemThemeDescription: 'An Geräteeinstellungen anpassen',
+    largerText: 'Größerer Text',
+    largerTextDescription: 'Schriftgröße für bessere Lesbarkeit erhöhen',
+    highContrast: 'Hoher Kontrast',
+    highContrastDescription: 'Farbkontrast für bessere Sichtbarkeit verbessern',
+    
+    // Notifications
+    notificationsSection: 'Benachrichtigungen',
+    pushNotifications: 'Push-Benachrichtigungen',
+    pushNotificationsDescription: 'Push-Benachrichtigungen für Nachrichten und Updates empfangen',
+    notificationLevel: 'Benachrichtigungsstufe',
+    notificationLevelDescription: 'Steuerung, welche Benachrichtigungen Sie erhalten',
+    vibration: 'Vibration',
+    vibrationDescription: 'Haptisches Feedback für Benachrichtigungen aktivieren',
+    sound: 'Ton',
+    soundDescription: 'Töne für eingehende Benachrichtigungen abspielen',
+    
+    // Privacy
+    privacySection: 'Datenschutz',
+    profileVisibility: 'Profil-Sichtbarkeit',
+    profileVisibilityDescription: 'Ihr Profil Nicht-Kontakten anzeigen',
+    lastSeen: 'Zuletzt aktiv',
+    lastSeenDescription: 'Anzeigen, wann Sie zuletzt aktiv waren',
+    screenRecording: 'Bildschirmaufnahme-Schutz',
+    screenRecordingDescription: 'Screenshots und Bildschirmaufnahme blockieren',
+    
+    // Data & Storage
+    dataSection: 'Daten und Speicher',
+    dataUsage: 'Datenverbrauchsmodus',
+    dataUsageDescription: 'Datenverbrauch steuern',
+    autoDownload: 'Medien automatisch herunterladen',
+    autoDownloadDescription: 'Bilder und Videos automatisch herunterladen',
+    clearCache: 'Cache beim Beenden löschen',
+    clearCacheDescription: 'Gecachte Daten beim Schließen der App entfernen',
+    
+    // Features
+    featuresSection: 'Funktionen',
+    biometricAuth: 'Biometrische Authentifizierung',
+    biometricAuthDescription: 'Face ID oder Touch ID für sicheren Zugriff verwenden',
+    autoDarkSwitch: 'Auto Dunkler Modus',
+    autoDarkSwitchDescription: 'Automatisch basierend auf Tageszeit wechseln',
+    
+    // Data usage options
+    dataStandard: 'Standard',
+    dataStandardDescription: 'Normaler Datenverbrauch (Standard)',
+    dataLow: 'Niedrig',
+    dataLowDescription: 'Datenverbrauch reduzieren',
+    dataEconomy: 'Wirtschaft',
+    dataEconomyDescription: 'Minimale Datenverwendung',
+    
+    // Notification levels
+    levelNone: 'Keine',
+    levelNoneDescription: 'Alle Benachrichtigungen deaktivieren',
+    levelCritical: 'Nur Kritisch',
+    levelCriticalDescription: 'Nur kritische Alerts',
+    levelImportant: 'Wichtig',
+    levelImportantDescription: 'Wichtige und kritische Alerts',
+    levelAll: 'Alle',
+    levelAllDescription: 'Alle Benachrichtigungen',
+    
+    // Buttons
+    resetPreferences: 'Einstellungen zurücksetzen',
+    resetPreferencesConfirm: 'Alle Einstellungen auf Standard zurücksetzen?',
+    resetComplete: 'Einstellungen erfolgreich zurückgesetzt',
+    resetError: 'Fehler beim Zurücksetzen der Einstellungen',
   },
   home: {
     greeting: 'Hallo, Tamgora-Creator',

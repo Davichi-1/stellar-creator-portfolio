@@ -213,7 +213,7 @@ export function AppNavigator() {
 
         <Stack.Screen
           name="DetailsView"
-          options={{ animation: ScreenTransitions.Dashboard }}
+          options={{ animation: ScreenTransitions.DetailsView }}
         >
           {({ navigation }: NativeStackScreenProps<RootStackParamList, 'DetailsView'>) => (
             <DetailsView onBack={() => navigation.goBack()} />
@@ -229,14 +229,14 @@ export function AppNavigator() {
         </Stack.Screen>
         <Stack.Screen
           name="PortfolioUpload"
-          options={{ animation: 'slide_from_bottom', headerShown: false }}
+          options={{ animation: ScreenTransitions.PortfolioUpload, headerShown: false }}
           component={PortfolioUploadScreen}
         />
 
         {/* ── Issue #542 — Creator Native Profile ───────────────────────── */}
         <Stack.Screen
           name="CreatorProfile"
-          options={{ animation: "slide_from_right" }}
+          options={{ animation: ScreenTransitions.CreatorProfile }}
         >
           {({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'CreatorProfile'>) => (
             <CreatorProfileScreen
@@ -255,7 +255,7 @@ export function AppNavigator() {
         {/* ── Issue #544 — Freelancer Directory ─────────────────────────── */}
         <Stack.Screen
           name="FreelancerDirectory"
-          options={{ animation: "slide_from_right" }}
+          options={{ animation: ScreenTransitions.FreelancerDirectory }}
         >
           {({ navigation }: NativeStackScreenProps<RootStackParamList, 'FreelancerDirectory'>) => (
             <FreelancerDirectoryScreen
@@ -269,7 +269,7 @@ export function AppNavigator() {
 
         <Stack.Screen
           name="FreelancerProfile"
-          options={{ animation: "slide_from_right" }}
+          options={{ animation: ScreenTransitions.FreelancerProfile }}
         >
           {({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'FreelancerProfile'>) => (
             <CreatorProfileScreen
@@ -288,7 +288,7 @@ export function AppNavigator() {
         {/* ── Issue #545 — Image Picker ──────────────────────────────────── */}
         <Stack.Screen
           name="ImagePicker"
-          options={{ animation: "slide_from_bottom" }}
+          options={{ animation: ScreenTransitions.ImagePicker }}
         >
           {({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'ImagePicker'>) => (
             <ImagePickerScreen
@@ -302,7 +302,7 @@ export function AppNavigator() {
         {/* ── Advanced Image Cropper & Filters ───────────────────────────── */}
         <Stack.Screen
           name="ImageEditor"
-          options={{ animation: "slide_from_bottom" }}
+          options={{ animation: ScreenTransitions.ImageEditor }}
         >
           {({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'ImageEditor'>) => (
             <ImageEditorScreen
@@ -320,7 +320,7 @@ export function AppNavigator() {
         {/* ── Messaging (used by deep-link + creator profile CTA) ───────── */}
         <Stack.Screen
           name="Messaging"
-          options={{ animation: "slide_from_right" }}
+          options={{ animation: ScreenTransitions.Messaging }}
         >
           {({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'Messaging'>) => (
             <MessagingScreen
@@ -336,13 +336,13 @@ export function AppNavigator() {
         <Stack.Screen
           name="BiometricAuth"
           component={BiometricAuthScreen}
-          options={{ animation: ScreenTransitions.Dashboard }}
+          options={{ animation: ScreenTransitions.BiometricAuth }}
         />
 
         {/* ── Issue #741 — Extended deep-link screens ───────────────────── */}
         <Stack.Screen
           name="BountyDetail"
-          options={{ animation: "slide_from_right" }}
+          options={{ animation: ScreenTransitions.BountyDetail }}
         >
           {({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'BountyDetail'>) => (
             <BountyDetailScreen
@@ -354,7 +354,7 @@ export function AppNavigator() {
 
         <Stack.Screen
           name="EmailVerification"
-          options={{ animation: "fade", headerShown: false }}
+          options={{ animation: ScreenTransitions.EmailVerification, headerShown: false }}
         >
           {({ route }: NativeStackScreenProps<RootStackParamList, 'EmailVerification'>) => (
             <EmailVerificationScreen token={route.params?.token} />
@@ -363,7 +363,7 @@ export function AppNavigator() {
 
         <Stack.Screen
           name="PaymentComplete"
-          options={{ animation: "slide_from_bottom", headerShown: false }}
+          options={{ animation: ScreenTransitions.PaymentComplete, headerShown: false }}
         >
           {({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'PaymentComplete'>) => (
             <PaymentCompleteScreen
@@ -376,7 +376,7 @@ export function AppNavigator() {
 
         <Stack.Screen
           name="NotificationSettings"
-          options={{ animation: "slide_from_right" }}
+          options={{ animation: ScreenTransitions.NotificationSettings }}
         >
           {({ navigation }: NativeStackScreenProps<RootStackParamList, 'NotificationSettings'>) => (
             <NotificationSettingsScreen onBack={() => navigation.goBack()} />
@@ -386,7 +386,7 @@ export function AppNavigator() {
         {/* ── Issue #777 — Live streaming host/viewer ───────────────────── */}
         <Stack.Screen
           name="StreamHost"
-          options={{ animation: "slide_from_bottom" }}
+          options={{ animation: ScreenTransitions.StreamHost }}
         >
           {({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'StreamHost'>) => (
             <StreamHostScreen
@@ -399,7 +399,7 @@ export function AppNavigator() {
 
         <Stack.Screen
           name="StreamViewer"
-          options={{ animation: "slide_from_right" }}
+          options={{ animation: ScreenTransitions.StreamViewer }}
         >
           {({ route, navigation }: NativeStackScreenProps<RootStackParamList, 'StreamViewer'>) => (
             <StreamViewerScreen

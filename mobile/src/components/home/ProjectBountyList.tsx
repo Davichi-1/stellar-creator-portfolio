@@ -1,5 +1,5 @@
-import React, { useMemo } from "react";
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useCallback } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { ProjectBountyItem } from "../../types";
 import { useTheme } from "../../theme/ThemeProvider";
 import {
@@ -16,16 +16,20 @@ interface ProjectBountyListProps {
   onSelect: (item: ProjectBountyItem) => void;
 }
 
-export function ProjectBountyList({
-  items,
-  title,
+const ProjectBountyRow = React.memo(function ProjectBountyRow({
+  item,
   onSelect,
-}: ProjectBountyListProps) {
+}: {
+  item: ProjectBountyItem;
+  onSelect: (item: ProjectBountyItem) => void;
+}) {
   const { colors } = useTheme();
+  const isProject = item.kind === "project";
+  const handlePress = useCallback(() => onSelect(item), [item, onSelect]);
 
-  const renderItem = ({ item }: { item: ProjectBountyItem }) => (
+  return (
     <Pressable
-      onPress={() => onSelect(item)}
+      onPress={handlePress}
       style={({ pressed }) => [
         styles.card,
         {
@@ -43,11 +47,8 @@ export function ProjectBountyList({
           style={[
             styles.kind,
             {
-              backgroundColor:
-                item.kind === "project"
-                  ? colors.primaryLight
-                  : colors.accentLight,
-              color: item.kind === "project" ? colors.primary : colors.accent,
+              backgroundColor: isProject ? colors.primaryLight : colors.accentLight,
+              color: isProject ? colors.primary : colors.accent,
             },
           ]}
         >
@@ -56,13 +57,9 @@ export function ProjectBountyList({
         <Text
           style={[
             styles.status,
-            {
-              color:
-                item.status === "Live" ? colors.success : colors.textSecondary,
-            },
+            { color: item.status === "Live" ? colors.success : colors.textSecondary },
           ]}
         >
-          {" "}
           {item.status}
         </Text>
       </View>
@@ -76,12 +73,8 @@ export function ProjectBountyList({
         {item.subtitle}
       </Text>
       <View style={styles.footer}>
-        <Text style={[styles.reward, { color: colors.text }]}>
-          {item.reward}
-        </Text>
-        <Text style={[styles.due, { color: colors.textTertiary }]}>
-          {item.due}
-        </Text>
+        <Text style={[styles.reward, { color: colors.text }]}>{item.reward}</Text>
+        <Text style={[styles.due, { color: colors.textTertiary }]}>{item.due}</Text>
       </View>
       <View style={styles.tagsRow}>
         {item.tags.map((tag) => (
@@ -97,21 +90,30 @@ export function ProjectBountyList({
       </View>
     </Pressable>
   );
+});
 
-  const keyExtractor = useMemo(() => (item: ProjectBountyItem) => item.id, []);
+export function ProjectBountyList({
+  items,
+  title,
+  onSelect,
+}: ProjectBountyListProps) {
+  const { colors } = useTheme();
 
   return (
     <View style={styles.section}>
       <Text style={[styles.heading, { color: colors.text }]}>{title}</Text>
-      <FlatList
-        data={items}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        scrollEnabled={false}
-        removeClippedSubviews
-        initialNumToRender={4}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+      {items.length === 0 ? (
+        <Text style={[styles.empty, { color: colors.textSecondary }]}>
+          No projects or bounties yet.
+        </Text>
+      ) : (
+        items.map((item, index) => (
+          <View key={item.id}>
+            {index > 0 ? <View style={styles.separator} /> : null}
+            <ProjectBountyRow item={item} onSelect={onSelect} />
+          </View>
+        ))
+      )}
     </View>
   );
 }
@@ -124,6 +126,10 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     fontWeight: FontWeight.bold,
     marginBottom: Spacing.sm,
+  },
+  empty: {
+    fontSize: FontSize.sm,
+    lineHeight: 20,
   },
   card: {
     borderRadius: Radius.xl,

@@ -47,6 +47,26 @@ interface UseWebSocketOptions {
   reconnectDelay?: number;
 }
 
+/**
+ * Custom React hook for managing WebSocket connections with automatic reconnection and lifecycle handling.
+ *
+ * Key capabilities:
+ * - Automatically connects to the provided WebSocket URL and cleans up on unmount
+ * - Handles reconnection with configurable attempt counts and backoff delay
+ * - Parses incoming messages and dispatches errors when parsing fails
+ * - Tracks connection state (`isConnected`) and notifies on connection transitions
+ * - Provides a safe `send` method that validates socket readiness
+ * - Provides a manual `disconnect` method that prevents zombie reconnect loops
+ *
+ * @param options - Configuration options for the WebSocket connection
+ * @param options.url - The WebSocket server endpoint URL
+ * @param options.onMessage - Optional callback invoked when a parsed message is received
+ * @param options.onError - Optional callback invoked on connection or message parsing error
+ * @param options.onConnectionChange - Optional callback invoked on connection state transitions
+ * @param options.reconnectAttempts - Maximum number of reconnection attempts before giving up (default: 5)
+ * @param options.reconnectDelay - Delay in milliseconds between reconnection attempts (default: 3000)
+ * @returns An object containing `isConnected` status, `send` function to transmit messages, and `disconnect` function
+ */
 export function useWebSocket({
   url,
   onMessage,

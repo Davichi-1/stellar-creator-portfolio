@@ -1,45 +1,53 @@
-// Server component to fetch public GitHub profile data for a username
-import React from "react";
-import Image from "next/image";
+// Server component: fetches public GitHub profile data for a linked account.
+import React from 'react';
+import Image from 'next/image';
+import { LinkCard } from '@/components/profile/link-card';
+import { fetchGithubProfile, parseProfileLink } from '@/lib/profile-links';
 
-type Props = { username: string };
+type Props = { username?: string; url?: string };
 
-export default async function GithubProfile({ username }: Props) {
-    if (!username) return null;
+/**
+ * Renders the linked GitHub account (avatar, bio, repo / follower counts).
+ * Pass either a `username` or a full profile `url`; the URL is parsed and
+ * validated before any request is made.
+ */
+export default async function GithubProfile({ username, url }: Props) {
+    const parsed = url ? parseProfileLink('github', url) : null;
+    const login = username ?? (parsed?.ok ? parsed.handle : null);
+    if (!login) return null;
 
-    try {
-        const res = await fetch(`https://api.github.com/users/${encodeURIComponent(username)}`, {
-            // rely on server-side fetch caching
-            next: { revalidate: 60 },
-        });
-        if (!res.ok) return (
-            <div className="p-4 rounded-md border">
-                <div>Unable to fetch GitHub data.</div>
-            </div>
-        );
-        const data = await res.json();
+    const result = await fetchGithubProfile(login, { githubToken: process.env.GITHUB_TOKEN });
 
+    if (result.status !== 'ok') {
         return (
-            <div className="p-4 rounded-lg border bg-card">
-                <div className="flex items-center gap-4">
-                    <Image src={data.avatar_url} alt="avatar" width={72} height={72} className="rounded-full" />
-                    <div>
-                        <div className="font-semibold">{data.name || data.login}</div>
-                        <div className="text-sm text-muted-foreground">{data.bio}</div>
-                        <div className="mt-2 text-xs text-muted-foreground">
-                            <span className="mr-3">{data.public_repos} repos</span>
-                            <span className="mr-3">{data.followers} followers</span>
-                            <span>{data.following} following</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    } catch (e) {
-        return (
-            <div className="p-4 rounded-md border">
-                <div>Error fetching GitHub profile.</div>
+            <div className="p-4 rounded-lg border bg-card text-sm text-muted-foreground" role="status">
+                {result.status === 'not_found' ? result.message : 'Unable to fetch GitHub data right now.'}
             </div>
         );
     }
+
+    const { profile } = result;
+    return (
+        <LinkCard
+            href={profile.htmlUrl}
+            provider="GitHub"
+            title={profile.name || profile.login}
+            subtitle={profile.bio}
+            verification={{ kind: 'github', status: 'verified', message: `Verified as @${profile.login}` }}
+            media={
+                <Image
+                    src={profile.avatarUrl}
+                    alt={`${profile.login} avatar`}
+                    width={64}
+                    height={64}
+                    className="h-16 w-16 shrink-0 rounded-full"
+                />
+            }
+            stats={[
+                { label: 'repos', value: profile.publicRepos },
+                { label: 'followers', value: profile.followers },
+                { label: 'following', value: profile.following },
+            ]}
+        />
+    );
 }

@@ -3,52 +3,31 @@
  *
  * Video trimming UI with video preview player, playhead scrubber, audio waveform
  * visualization, drag handles, and 60-second limit enforcement.
+ *
+ * The native export call and time-formatting helper live in
+ * `MediaTrimmer.helpers.ts`, and the waveform/thumbnail-strip/handles/time-labels
+ * timeline lives in `MediaTrimmerScrubber.tsx` — split out to keep this file
+ * focused on state, gestures, and the export flow.
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  NativeModules,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
   DeviceEventEmitter,
 } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture } from 'react-native-gesture-handler';
 import Video from 'react-native-video';
-import type { TrimOptions, TrimRange, TrimResult, VideoFrame } from '../types';
+import type { TrimRange, TrimResult, VideoFrame } from '../types';
+import { trimNative } from './MediaTrimmer.helpers';
+import { MediaTrimmerScrubber } from './MediaTrimmerScrubber';
 
-const { StellarFFmpeg } = NativeModules;
 const SCREEN_W = Dimensions.get('window').width;
 const SCRUBBER_W = SCREEN_W - 32;
-
-// ─── Native bridge call ───────────────────────────────────────────────────────
-
-async function trimNative(opts: TrimOptions): Promise<TrimResult> {
-  const outputUri = opts.inputUri.replace(/\.[^.]+$/, `_trimmed.${opts.outputFormat}`);
-  return StellarFFmpeg.trimVideo({
-    inputUri:        opts.inputUri,
-    outputUri:       outputUri,
-    startMs:         opts.range.startMs,
-    endMs:           opts.range.endMs,
-    videoBitrate:    opts.videoBitrate ?? 4000,
-    audioBitrate:    opts.audioBitrate ?? 128,
-    hardwareEncoding: opts.hardwareEncoding,
-  });
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function msToDisplay(ms: number): string {
-  const s   = Math.floor(ms / 1000);
-  const min = Math.floor(s / 60).toString().padStart(2, '0');
-  const sec = (s % 60).toString().padStart(2, '0');
-  const frac = Math.floor((ms % 1000) / 10).toString().padStart(2, '0');
-  return `${min}:${sec}.${frac}`;
-}
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -74,7 +53,7 @@ export function MediaTrimmer({
   const [exporting,   setExporting]   = useState(false);
   const [progress,    setProgress]    = useState(0);
   const [error,       setError]       = useState<string | null>(null);
-  
+
   // Scrubber playhead position tracking
   const [playPositionMs, setPlayPositionMs] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -111,12 +90,12 @@ export function MediaTrimmer({
     .onUpdate((e) => {
       const frac   = Math.max(0, Math.min(e.x / SCRUBBER_W, endFrac - 0.05));
       let newMs  = Math.round(frac * durationMs);
-      
+
       // Enforce maximum duration of 60 seconds
       if (range.endMs - newMs > 60000) {
         newMs = range.endMs - 60000;
       }
-      
+
       setRange((r) => ({ ...r, startMs: newMs }));
       videoRef.current?.seek(newMs / 1000);
       setPlayPositionMs(newMs);
@@ -129,7 +108,7 @@ export function MediaTrimmer({
     .onUpdate((e) => {
       const frac  = Math.min(1, Math.max(e.x / SCRUBBER_W, startFrac + 0.05));
       let newMs = Math.round(frac * durationMs);
-      
+
       // Enforce maximum duration of 60 seconds
       if (newMs - range.startMs > 60000) {
         newMs = range.startMs + 60000;
@@ -173,7 +152,7 @@ export function MediaTrimmer({
 
   return (
     <View style={styles.container}>
-      
+
       {/* Video Preview Frame */}
       <View style={styles.videoContainer}>
         <Video
@@ -189,83 +168,25 @@ export function MediaTrimmer({
             videoRef.current?.seek(range.startMs / 1000);
           }}
         />
-        <TouchableOpacity 
-          style={styles.playPauseBtn} 
+        <TouchableOpacity
+          style={styles.playPauseBtn}
           onPress={() => setPaused(!paused)}
         >
           <Text style={styles.playPauseText}>{paused ? '▶' : '⏸'}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Audio Waveform Visualization on the Timeline */}
-      <View style={styles.waveformContainer}>
-        {Array.from({ length: 40 }).map((_, i) => {
-          const barFrac = i / 40;
-          const isSelected = barFrac >= startFrac && barFrac <= endFrac;
-          const height = 15 + Math.sin(i * 0.5) * 10 + Math.cos(i * 0.2) * 5;
-          return (
-            <View
-              key={i}
-              style={[
-                styles.waveformBar,
-                {
-                  height,
-                  backgroundColor: isSelected ? '#6366f1' : '#3f3f46',
-                },
-              ]}
-            />
-          );
-        })}
-      </View>
-
-      {/* Thumbnail strip & Scrubber handles */}
-      <View style={styles.strip}>
-        {frames.map((f) => (
-          <View
-            key={f.index}
-            style={[styles.frame, { width: SCRUBBER_W / Math.max(frames.length, 1) }]}
-          />
-        ))}
-
-        {/* Selected range overlay */}
-        <View
-          style={[
-            styles.rangeOverlay,
-            { left: startFrac * SCRUBBER_W, width: (endFrac - startFrac) * SCRUBBER_W },
-          ]}
-        />
-
-        {/* Playback Scrubber Line */}
-        <View
-          style={[
-            styles.scrubberLine,
-            { left: (playPositionMs / durationMs) * SCRUBBER_W }
-          ]}
-        />
-
-        {/* Start handle */}
-        <GestureDetector gesture={startHandle}>
-          <View style={[styles.handle, styles.handleLeft, { left: startFrac * SCRUBBER_W - 10 }]}>
-            <View style={styles.handleBar} />
-          </View>
-        </GestureDetector>
-
-        {/* End handle */}
-        <GestureDetector gesture={endHandle}>
-          <View style={[styles.handle, styles.handleRight, { left: endFrac * SCRUBBER_W - 10 }]}>
-            <View style={styles.handleBar} />
-          </View>
-        </GestureDetector>
-      </View>
-
-      {/* Time labels */}
-      <View style={styles.timeRow}>
-        <Text style={styles.timeLabel}>{msToDisplay(range.startMs)}</Text>
-        <Text style={styles.durationLabel}>
-          {msToDisplay(range.endMs - range.startMs)} selected (Max 60.00s)
-        </Text>
-        <Text style={styles.timeLabel}>{msToDisplay(range.endMs)}</Text>
-      </View>
+      <MediaTrimmerScrubber
+        frames={frames}
+        range={range}
+        durationMs={durationMs}
+        startFrac={startFrac}
+        endFrac={endFrac}
+        playPositionMs={playPositionMs}
+        scrubberWidth={SCRUBBER_W}
+        startHandle={startHandle}
+        endHandle={endHandle}
+      />
 
       {/* Hardware encoding toggle */}
       <TouchableOpacity
@@ -316,19 +237,6 @@ const styles = StyleSheet.create({
   videoPlayer:      { width: '100%', height: '100%' },
   playPauseBtn:     { position: 'absolute', bottom: 12, right: 12, backgroundColor: 'rgba(0,0,0,0.6)', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
   playPauseText:    { color: '#fff', fontSize: 16 },
-  waveformContainer:{ height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, marginBottom: 8 },
-  waveformBar:      { width: 4, borderRadius: 2 },
-  strip:            { height: 64, flexDirection: 'row', borderRadius: 8, overflow: 'visible', position: 'relative', marginBottom: 8, backgroundColor: '#181825' },
-  frame:            { height: 64, backgroundColor: 'rgba(255,255,255,0.03)' },
-  rangeOverlay:     { position: 'absolute', top: 0, bottom: 0, backgroundColor: 'rgba(99,102,241,0.2)', borderWidth: 2, borderColor: '#6366f1' },
-  scrubberLine:     { position: 'absolute', top: -4, bottom: -4, width: 3, backgroundColor: '#ef4444', zIndex: 11, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.5, shadowRadius: 2 },
-  handle:           { position: 'absolute', top: 0, bottom: 0, width: 20, justifyContent: 'center', alignItems: 'center', zIndex: 12 },
-  handleLeft:       { backgroundColor: '#6366f1', borderTopLeftRadius: 4, borderBottomLeftRadius: 4 },
-  handleRight:      { backgroundColor: '#6366f1', borderTopRightRadius: 4, borderBottomRightRadius: 4 },
-  handleBar:        { width: 3, height: 24, backgroundColor: '#fff', borderRadius: 2 },
-  timeRow:          { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  timeLabel:        { color: '#a1a1aa', fontSize: 12, fontVariant: ['tabular-nums'] },
-  durationLabel:    { color: '#6366f1', fontSize: 12, fontWeight: '600' },
   toggleRow:        { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
   toggleDot:        { width: 16, height: 16, borderRadius: 8, backgroundColor: '#3f3f46' },
   toggleDotActive:  { backgroundColor: '#6366f1' },

@@ -27,6 +27,18 @@ import { Loader2 } from 'lucide-react';
 
 type FormValues = DisputeFormInput;
 
+/**
+ * Form for filing a dispute against a counterparty on an order/bounty.
+ *
+ * Validates input with `disputeFormInputSchema`, then calls `fileDispute` to
+ * create the dispute record and optionally `addEvidence` to attach a single
+ * hashed evidence file. Evidence is hashed (SHA-256) and its metadata stored;
+ * the actual file bytes are not persisted in this demo implementation.
+ *
+ * @param userId - id of the user filing the dispute
+ * @param userName - display name of the user filing the dispute
+ * @param onFiled - callback invoked with the created `DisputeRecord` once filing succeeds
+ */
 export function DisputeForm({
   userId,
   userName,

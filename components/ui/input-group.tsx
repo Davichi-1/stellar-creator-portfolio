@@ -104,6 +104,17 @@ function InputGroupButton({
   ...props
 }: Omit<React.ComponentProps<typeof Button>, 'size'> &
   VariantProps<typeof inputGroupButtonVariants>) {
+  if (
+    process.env.NODE_ENV !== 'production' &&
+    (size === 'icon-xs' || size === 'icon-sm') &&
+    !props['aria-label'] &&
+    !props['aria-labelledby']
+  ) {
+    console.warn(
+      'InputGroupButton: icon-only buttons need an `aria-label` (or `aria-labelledby`) so screen reader users know what the control does.',
+    )
+  }
+
   return (
     <Button
       type={type}

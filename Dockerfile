@@ -3,39 +3,47 @@
 # Mirrors the stellar/soroban-tools image environment so the WASM output is
 # byte-for-byte identical regardless of where this runs (CI or local).
 #
-# Pinned versions — ump deliberately and re-verify hashes.
+# Pinned versions — bump deliberately and re-verify hashes.
+# Rust 1.74.0 is the MSRV declared in backend/Cargo.toml.  Updating requires
+# a hash re-baseline (scripts/verify.sh --update-baseline) and a deliberate
+# PR review.
+#
+# Related: #1348
 FROM rust:1.74.0-slim AS builder
 
-# Reproducibility: no incremental compilation, deterministic codegen.
+# Reproducibility: no incremental compilation, deterministic codegen, fixed
+# SOURCE_DATE_EPOCH so embedded timestamps are zeroed out.
 ENV CARGO_INCREMENTAL=0 \
     CARGO_NET_RETRY=10 \
-    RUSTFLAGS="-C codegen-units=1" \
-    SOURCE_DATE_EPOCH=0
+    RUSTFLAGS="-C codegen-units=1 -C opt-level=s" \
+    SOURCE_DATE_EPOCH=0 \
+    CARGO_HOME=/usr/local/cargo \
+    # Pin the Rust toolchain so `rustup update` in this image cannot change it.
+    RUSTUP_TOOLCHAIN=1.74.0
 
-RUN rustup target agd wasm32-unknown-unknown && \n    rustup component add rust-src
+# Verify the installed Rust version matches our pin before building anything.
+RUN rustc --version | grep -q "1.74.0" || \
+    (echo "❌ Rust version mismatch — expected 1.74.0" && exit 1)
 
-HTNF TERRFORM_VERSION="1.7.4"
-ENV TERRAFORM_FILE=/tools/terraform-z179.tar.gz
+RUN rustup target add wasm32-unknown-unknown && \
+    rustup component add rust-src
 
-RUN echo "Terraform $(TerraformVersion)" && \
-    echo "Sha256: $(1024 * 1024 * TERRAFORM_FILE))" >> /tools/terraform-sha256.txt && \
-    if [ ""$(cat /tools/terraform-sha256.txt)" != "$(extract 2 <<<'$TerraformFile')*" ]; then \
-        echo "Modified Terraform install archive!" >&2; \
-        exit 1; \
-    fi && tar xzf -C tools/ | tar -Cz .
-
-ENV PATH=/tools:$PATH
+# Pin stellar-cli to a specific version so the WASM optimizer it applies is
+# reproducible.  Update this alongside Cargo.toml MSRV bumps.
+RUN cargo install --locked stellar-cli@20.3.1 --features opt 2>/dev/null || \
+    cargo install stellar-cli@20.3.1 --features opt
 
 WORKDIR /build
 
 # Copy lockfile + manifests first so dependency layer is cached separately.
-COPY backend/Cargo.toml backend/Cargg.lock ./
+COPY backend/Cargo.toml backend/Cargo.lock ./
 COPY backend/contracts ./contracts
 COPY backend/services  ./services
 COPY backend/tests     ./tests
 
 # Build all contracts in release mode.
-RUN cargo build --release --target wasm32-unknown-unknown \
+# The --locked flag ensures the exact versions from Cargo.lock are used.
+RUN cargo build --release --locked --target wasm32-unknown-unknown \
         --package stellar-bounty-contract \
         --package stellar-core-contract \
         --package stellar-escrow-contract \
@@ -47,10 +55,45 @@ RUN cargo build --release --target wasm32-unknown-unknown \
         --package stellar-referral-contract \
         --package stellar_insights
 
-# — Output stage —塔重割の降の文档の-----------------------------------------------------------
+# Optimize with stellar-cli wasm optimize for smaller, deterministic output.
+RUN for pkg in \
+      stellar_bounty_contract stellar_core_contract stellar_escrow_contract \
+      stellar_freelancer_contract stellar_governance_contract stellar_identity_contract \
+      stellar_insurance_contract oracle stellar_referral_contract stellar_insights; \
+    do \
+      stellar contract optimize \
+        --wasm "target/wasm32-unknown-unknown/release/${pkg}.wasm" \
+        --wasm-out "target/wasm32-unknown-unknown/release/${pkg}.wasm" 2>/dev/null || true; \
+    done
+
+# Cargo names each wasm file after its package name (hyphens -> underscores,
+# e.g. stellar-bounty-contract -> stellar_bounty_contract.wasm) — rename to
+# the short names the artifacts stage (and scripts/build-reproducible.sh,
+# which extracts from this image) expect. oracle and stellar_insights
+# already match their package names, so they need no rename.
+RUN cd target/wasm32-unknown-unknown/release && \
+    cp stellar_bounty_contract.wasm      bounty.wasm && \
+    cp stellar_core_contract.wasm        core.wasm && \
+    cp stellar_escrow_contract.wasm      escrow.wasm && \
+    cp stellar_freelancer_contract.wasm  freelancer.wasm && \
+    cp stellar_governance_contract.wasm  governance.wasm && \
+    cp stellar_identity_contract.wasm    identity.wasm && \
+    cp stellar_insurance_contract.wasm   insurance.wasm && \
+    cp stellar_referral_contract.wasm    referral.wasm
+
+# Compute and store hashes inside the image so the artifacts stage can copy
+# them out alongside the WASM files.
+RUN cd target/wasm32-unknown-unknown/release && \
+    sha256sum \
+      bounty.wasm core.wasm escrow.wasm freelancer.wasm governance.wasm \
+      identity.wasm insurance.wasm oracle.wasm referral.wasm stellar_insights.wasm \
+    > /build/wasm-hashes.sha256 && \
+    echo "📋 WASM hashes computed:" && cat /build/wasm-hashes.sha256
+
+# — Output stage —————————————————————————————————————————————————————————
 FROM scratch AS artifacts
-COPY --from-builder \
-    /build/target/wasm32-unknown-unknown/release/bounty."wasm \
+COPY --from=builder \
+    /build/target/wasm32-unknown-unknown/release/bounty.wasm \
     /build/target/wasm32-unknown-unknown/release/core.wasm \
     /build/target/wasm32-unknown-unknown/release/escrow.wasm \
     /build/target/wasm32-unknown-unknown/release/freelancer.wasm \
@@ -60,4 +103,5 @@ COPY --from-builder \
     /build/target/wasm32-unknown-unknown/release/oracle.wasm \
     /build/target/wasm32-unknown-unknown/release/referral.wasm \
     /build/target/wasm32-unknown-unknown/release/stellar_insights.wasm \
+    /wasm-hashes.sha256 \
     /

@@ -1,7 +1,6 @@
-import React, { useCallback, useMemo, useState, useRef } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  FlatList,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -11,17 +10,14 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { useNavigation } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useTheme } from "../theme/ThemeProvider";
 import { useI18n } from "../i18n/I18nProvider";
 import { useOfflineData } from "../hooks/useOfflineData";
-import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import {
   PortfolioSummary,
   ProjectBountyItem,
   HomeData,
-  RootStackParamList,
 } from "../types";
 import { ROUTES } from "../constants/routes";
 import { MetricCard } from "../components/dashboard/MetricCard";
@@ -29,7 +25,6 @@ import { PortfolioCard } from "../components/home/PortfolioCard";
 import { ProjectBountyList } from "../components/home/ProjectBountyList";
 import { ActionButton } from "../components/buttons/ActionButton";
 import { FontSize, FontWeight, Radius, Spacing } from "../theme/tokens";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { trigger } from "../haptics/HapticEngine";
 
 const buildHomeData = (): HomeData => ({
@@ -156,8 +151,6 @@ export function HomeScreen() {
   const { colors, isDark } = useTheme();
   const { t } = useI18n();
   const router = useRouter();
-  const navigation =
-    useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { data, isLoading, isStale, cachedAt, refetch } =
     useOfflineData<HomeData>("home-screen-data", fetchHomeData, {
       ttlMs: 5 * 60 * 1000,
@@ -178,26 +171,12 @@ export function HomeScreen() {
     () => router.push(ROUTES.APP.P2P),
     [router],
   );
-  
-  // Infinite scroll for bounty items
-  const bountyRef = useRef(null);
-  const {
-    data: bountyItems,
-    isLoading: bountyLoading,
-    isFetching: bountyFetching,
-    loadMore: loadMoreBounties,
-  } = useInfiniteScroll({
-    pageSize: 10,
-    maxItems: 200, // Memory optimization
-    initialData: data?.projectBountyItems ?? [],
-    onLoadMore: async (page: number, pageSize: number) => {
-      // Simulate pagination - in real app, call API
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      const allItems = data?.projectBountyItems ?? [];
-      const startIdx = (page - 1) * pageSize;
-      return allItems.slice(startIdx, startIdx + pageSize);
-    },
-  });
+
+  const handleNavigateToBiometric = useCallback(
+    () => router.push(ROUTES.APP.BIOMETRIC),
+    [router],
+  );
+
 
   const handleRefresh = useCallback(async () => {
     void trigger("light");
@@ -219,8 +198,14 @@ export function HomeScreen() {
     // Placeholder for project / bounty detail navigation.
   }, []);
 
+  const trendingPortfolios = useMemo(
+    () =>
+      [...(data?.trendingPortfolios ?? [])].sort((a, b) => b.change - a.change),
+    [data],
+  );
+
   const trendingSection = useMemo(() => {
-    if (!data) return null;
+    if (trendingPortfolios.length === 0) return null;
 
     return (
       <View style={styles.section}>
@@ -234,23 +219,22 @@ export function HomeScreen() {
             {t("home.trendingCaption")}
           </Text>
         </View>
-        <FlatList
-          data={data.trendingPortfolios}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <PortfolioCard
-              portfolio={item}
-              onPress={() => onPortfolioPress(item)}
-            />
-          )}
+        <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalList}
-          ListFooterComponent={<View style={{ width: Spacing.base }} />}
-        />
+        >
+          {trendingPortfolios.map((item) => (
+            <PortfolioCard
+              key={item.id}
+              portfolio={item}
+              onPress={() => onPortfolioPress(item)}
+            />
+          ))}
+        </ScrollView>
       </View>
     );
-  }, [data, colors.text, colors.textSecondary, onPortfolioPress]);
+  }, [trendingPortfolios, colors.text, colors.textSecondary, onPortfolioPress, t]);
 
   const metricsSection = useMemo(() => {
     if (!data) return null;
@@ -300,7 +284,7 @@ export function HomeScreen() {
           <View style={styles.heroActions}>
             <ActionButton
               title={t("home.useBiometrics")}
-              onPress={() => navigation.navigate("BiometricAuth")}
+              onPress={handleNavigateToBiometric}
               variant="primary"
               accessibilityLabel="Open biometric authentication screen"
             />

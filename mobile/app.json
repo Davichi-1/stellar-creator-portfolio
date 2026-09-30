@@ -23,7 +23,24 @@
         "NSPhotoLibraryUsageDescription": "Tamgora needs access to your photo library to upload portfolio images.",
         "NSCameraUsageDescription": "Tamgora needs camera access to capture portfolio photos.",
         "NSPhotoLibraryAddUsageDescription": "Tamgora needs permission to save photos to your library.",
-        "NSFaceIDUsageDescription": "Tamgora uses Face ID or Touch ID to securely authenticate portfolio access."
+        "NSMicrophoneUsageDescription": "Tamgora needs microphone access to record portfolio videos.",
+        "NSFaceIDUsageDescription": "Tamgora uses Face ID or Touch ID to securely authenticate portfolio access.",
+        "NSUserTrackingUsageDescription": "Tamgora uses tracking to provide personalized content and share experiences.",
+        "LSApplicationQueriesSchemes": [
+          "whatsapp",
+          "tg",
+          "fb",
+          "twitter",
+          "instagram",
+          "linkedin",
+          "snapchat",
+          "reddit",
+          "mailto",
+          "sms",
+          "lobstr",
+          "solar",
+          "wc"
+        ]
       }
     },
     "android": {
@@ -36,7 +53,13 @@
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "CAMERA",
-        "READ_MEDIA_IMAGES"
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "RECORD_AUDIO",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
       ],
       "intentFilters": [
         {
@@ -46,6 +69,11 @@
             {
               "scheme": "https",
               "host": "tamgora.app",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "https",
+              "host": "www.tamgora.app",
               "pathPrefix": "/"
             }
           ],
@@ -60,8 +88,21 @@
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]
+        },
+        {
+          "action": "SEND",
+          "data": [
+            {
+              "mimeType": "text/plain"
+            },
+            {
+              "mimeType": "image/*"
+            }
+          ],
+          "category": ["DEFAULT"]
         }
-      ]
+      ],
+      "sharedUsers": []
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -88,15 +129,73 @@
         }
       ],
       [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Tamgora uses Face ID or Touch ID to securely authenticate portfolio access."
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "ios": { "newArchEnabled": true },
           "android": { "newArchEnabled": true }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#6366f1",
+          "sounds": ["./assets/notification-sounds/default.mp3"],
+          "android": {
+            "useNextNotificationsApi": true
+          }
+        }
       ]
     ],
     "extra": {
-      "eas": { "projectId": "tamgora" }
+      "eas": { "projectId": "tamgora" },
+      "router": {
+        "origin": false,
+        "screens": {
+          "details": {
+            "title": "Details",
+            "presentation": "card",
+            "animation": "slide_from_right",
+            "gestureEnabled": true
+          },
+          "proposal": {
+            "title": "Proposal",
+            "presentation": "modal",
+            "animation": "slide_from_bottom",
+            "gestureEnabled": true
+          },
+          "application": {
+            "title": "Application",
+            "presentation": "modal",
+            "animation": "slide_from_bottom",
+            "gestureEnabled": true
+          },
+          "creator": {
+            "title": "Creator",
+            "presentation": "card",
+            "animation": "slide_from_right",
+            "gestureEnabled": true
+          },
+          "explore": {
+            "title": "Explore",
+            "presentation": "card",
+            "animation": "fade",
+            "gestureEnabled": true
+          },
+          "bounty-detail": {
+            "title": "Bounty",
+            "presentation": "card",
+            "animation": "slide_from_right",
+            "gestureEnabled": true
+          }
+        }
+      }
     }
   }
 }

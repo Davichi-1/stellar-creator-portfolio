@@ -4,7 +4,10 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
-import DOMPurify from 'isomorphic-dompurify';
+import { useState } from 'react';
+import { sanitizeRichText } from '@/lib/rich-text/sanitize';
+import { VideoEmbed } from '@/lib/rich-text/video-embed-extension';
+import { parseVideoUrl } from '@/lib/rich-text/video-embed';
 
 interface RichTextEditorProps {
   value?: string;
@@ -14,16 +17,22 @@ interface RichTextEditorProps {
 }
 
 export function RichTextEditor({ value = '', onChange, placeholder = 'Write project details...', className }: RichTextEditorProps) {
+  const [embedOpen, setEmbedOpen] = useState(false);
+  const [embedUrl, setEmbedUrl] = useState('');
+  const [embedError, setEmbedError] = useState<string | null>(null);
+
   const editor = useEditor({
+    // Avoid SSR/client markup mismatch in the App Router.
+    immediatelyRender: false,
     extensions: [
       StarterKit,
+      VideoEmbed,
       Link.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
       Placeholder.configure({ placeholder }),
     ],
     content: value,
     onUpdate({ editor }) {
-      const html = DOMPurify.sanitize(editor.getHTML());
-      onChange?.(html);
+      onChange?.(sanitizeRichText(editor.getHTML()));
     },
     editorProps: {
       attributes: {
@@ -77,29 +86,44 @@ export function RichTextEditor({ value = '', onChange, placeholder = 'Write proj
         <button
           type="button"
           aria-label="Insert YouTube/Loom embed"
+          aria-expanded={embedOpen}
           onMouseDown={(e) => {
             e.preventDefault();
-            const url = window.prompt('Enter YouTube or Loom URL');
-            if (!url) return;
-            const isYoutube = /youtube\.com|youtu\.be/.test(url);
-            const isLoom = /loom\.com/.test(url);
-            if (!isYoutube && !isLoom) { alert('Only YouTube and Loom URLs are supported.'); return; }
-            let embedUrl = url;
-            if (isYoutube) {
-              const id = url.match(/(?:v=|youtu\.be\/)([^&?/]+)/)?.[1];
-              if (id) embedUrl = `https://www.youtube.com/embed/${id}`;
-            } else if (isLoom) {
-              embedUrl = url.replace('loom.com/share/', 'loom.com/embed/');
-            }
-            editor.chain().focus().insertContent(
-              `<div class="video-embed"><iframe src="${embedUrl}" allowfullscreen frameborder="0" class="w-full aspect-video rounded"></iframe></div>`
-            ).run();
+            setEmbedOpen((open) => !open);
+            setEmbedError(null);
           }}
-          className="px-2 py-1 text-xs rounded hover:bg-muted transition-colors"
+          className={`px-2 py-1 text-xs rounded hover:bg-muted transition-colors ${embedOpen ? 'bg-muted font-bold' : ''}`}
         >
           ▶ Embed
         </button>
       </div>
+      {embedOpen && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-input px-2 py-1.5 bg-muted/20">
+          <input
+            type="url"
+            value={embedUrl}
+            onChange={(e) => { setEmbedUrl(e.target.value); setEmbedError(null); }}
+            placeholder="Paste a YouTube or Loom link"
+            aria-label="YouTube or Loom URL"
+            className="min-w-0 flex-1 px-2 py-1 text-xs bg-background border border-input rounded focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <button
+            type="button"
+            className="px-2 py-1 text-xs rounded bg-primary text-primary-foreground"
+            onClick={() => {
+              if (!parseVideoUrl(embedUrl) || !editor.chain().focus().setVideoEmbed({ url: embedUrl }).run()) {
+                setEmbedError('Only YouTube and Loom links are supported.');
+                return;
+              }
+              setEmbedUrl('');
+              setEmbedOpen(false);
+            }}
+          >
+            Insert
+          </button>
+          {embedError && <p role="alert" className="w-full text-xs text-destructive">{embedError}</p>}
+        </div>
+      )}
       <EditorContent editor={editor} />
     </div>
   );
@@ -107,7 +131,7 @@ export function RichTextEditor({ value = '', onChange, placeholder = 'Write proj
 
 /** Read-only renderer for sanitized HTML stored from the editor */
 export function RichTextContent({ html, className }: { html: string; className?: string }) {
-  const clean = DOMPurify.sanitize(html);
+  const clean = sanitizeRichText(html);
   return (
     <div
       className={`prose prose-sm dark:prose-invert max-w-none ${className ?? ''}`}

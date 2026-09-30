@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { RichTextEditor } from '@/components/ui/rich-text';
+import { hasRichTextContent } from '@/lib/rich-text/sanitize';
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/trpc-client';
 import { BOUNTY_TEMPLATES, TEMPLATE_CATEGORIES, type BountyTemplate } from '@/lib/bounty-templates';
@@ -93,6 +94,12 @@ function TemplatePicker({ onSelect, onSkip }: { onSelect: (t: BountyTemplate) =>
 
 // ─── Main Form ────────────────────────────────────────────────────────────────
 
+/**
+ * Two-step project/bounty creation form: an optional template picker
+ * (pre-fills fields from `BOUNTY_TEMPLATES`) followed by the editable form
+ * fields. On submit it calls the `projects.create` tRPC mutation, then the
+ * `onSubmit` callback with the entered values, and resets the form.
+ */
 export function ProjectCreateForm({ onSubmit, onCancel }: ProjectCreateFormProps) {
   const [step, setStep] = useState<Step>('template');
   const [title, setTitle] = useState('');
@@ -135,7 +142,7 @@ export function ProjectCreateForm({ onSubmit, onCancel }: ProjectCreateFormProps
     }
   };
 
-  const isValid = title.trim().length > 0 && category.trim().length > 0 && description.trim().length > 0;
+  const isValid = title.trim().length > 0 && category.trim().length > 0 && hasRichTextContent(description);
   const submitting = createProjectMutation.isLoading;
 
   const field = (label: string, required: boolean, children: React.ReactNode) => (

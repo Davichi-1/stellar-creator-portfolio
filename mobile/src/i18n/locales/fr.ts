@@ -21,6 +21,24 @@ const fr = {
     hoursAgo: 'il y a {{count}}h',
     daysAgo: 'il y a {{count}}j',
   },
+
+  validation: {
+    required: 'Ce champ est obligatoire',
+    email: 'Veuillez saisir une adresse e-mail valide',
+    minLength: 'Au moins {{min}} caractères sont requis',
+    maxLength: 'Au maximum {{max}} caractères sont autorisés',
+    pattern: 'Format non valide',
+    password:
+      'Le mot de passe doit contenir au moins 8 caractères avec majuscule, minuscule, chiffre et caractère spécial',
+    phone: 'Veuillez saisir un numéro de téléphone valide',
+    url: 'Veuillez saisir une URL valide',
+    numeric: 'Veuillez saisir un nombre valide',
+    range: 'La valeur doit être comprise entre {{min}} et {{max}}',
+    match: 'Les valeurs ne correspondent pas',
+    stellarAddress: 'Veuillez saisir une adresse Stellar valide',
+    username:
+      "Le nom d'utilisateur ne peut contenir que des lettres, des chiffres, des tirets bas et des tirets",
+  },
   nav: {
     home: 'Accueil',
     creators: 'Créateurs',
@@ -111,6 +129,8 @@ const fr = {
     summaryTotal: "Total d'événements",
     summaryEarnings: 'Revenus',
     summaryBounties: 'Primes',
+    loading: 'Chargement de l\'activité…',
+    refresh: 'Actualiser',
   },
   share: {
     screenTitle: 'Partager',
@@ -118,10 +138,14 @@ const fr = {
     shareBounty: 'Partager la Prime',
     shareReview: "Partager l'Avis",
     shareAchievement: 'Partager la Réussite',
+    sharePortfolio: 'Partager le Portfolio',
+    shareLink: 'Partager le Lien',
     shareMessage: 'Découvrez {{name}} sur Tamgora — la marketplace des créateurs !',
     shareBountyMessage: 'Découvrez cette prime sur Tamgora : {{title}}',
     shareReviewMessage: "Je viens de noter {{name}} sur Tamgora",
     shareAchievementMessage: "Je viens de gagner le badge {{achievement}} sur Tamgora !",
+    sharePortfolioMessage: 'Découvrez ce portfolio sur Tamgora : {{title}}',
+    shareLinkMessage: 'Découvrez {{title}} sur Tamgora : {{url}}',
     copyLink: 'Copier le Lien',
     linkCopied: 'Lien copié dans le presse-papiers',
     shareVia: 'Partager via…',
@@ -137,6 +161,17 @@ const fr = {
     generating: 'Génération du lien…',
     profileUrl: 'URL du Profil',
     bountyUrl: 'URL de la Prime',
+    selectEndpoint: 'Partager à…',
+    searchEndpoints: 'Rechercher des endpoints...',
+    noResults: 'Aucun endpoint trouvé',
+    noEndpoints: 'Aucun endpoint de partage disponible',
+    preview: 'Aperçu',
+    endpointType: {
+      social: 'Social',
+      messaging: 'Messagerie',
+      email: 'Email',
+      system: 'Système',
+    },
   },
   chat: {
     typeMessage: 'Tapez un message…',
@@ -174,6 +209,81 @@ const fr = {
     version: 'Version {{version}}',
     languageChanged: 'Langue mise à jour : {{language}}',
     rtlNote: 'Mise en page droite-à-gauche activée',
+    
+    // Preferences
+    preferencesTitle: 'Préférences',
+    preferencesSubtitle: 'Personnalisez votre expérience',
+    
+    // Appearance
+    appearanceSection: 'Apparence',
+    darkMode: 'Mode Sombre',
+    darkModeDescription: 'Toujours utiliser le thème sombre',
+    systemTheme: 'Thème Système',
+    systemThemeDescription: 'S\'adapter aux paramètres de l\'appareil',
+    largerText: 'Texte Plus Grand',
+    largerTextDescription: 'Augmenter la taille de la police pour une meilleure lisibilité',
+    highContrast: 'Haut Contraste',
+    highContrastDescription: 'Améliorer le contraste des couleurs pour la visibilité',
+    
+    // Notifications
+    notificationsSection: 'Notifications',
+    pushNotifications: 'Notifications Push',
+    pushNotificationsDescription: 'Recevoir des alertes push pour les messages et mises à jour',
+    notificationLevel: 'Niveau de Notification',
+    notificationLevelDescription: 'Contrôler quelles notifications vous recevez',
+    vibration: 'Vibration',
+    vibrationDescription: 'Activer le retour haptique pour les notifications',
+    sound: 'Son',
+    soundDescription: 'Jouer des sons pour les notifications entrantes',
+    
+    // Privacy
+    privacySection: 'Confidentialité',
+    profileVisibility: 'Visibilité du Profil',
+    profileVisibilityDescription: 'Afficher votre profil aux non-contact',
+    lastSeen: 'Vu Pour la Dernière Fois',
+    lastSeenDescription: 'Afficher quand vous avez été actif pour la dernière fois',
+    screenRecording: 'Protection de Enregistrement d\'Écran',
+    screenRecordingDescription: 'Bloquer les captures d\'écran et l\'enregistrement d\'écran',
+    
+    // Data & Storage
+    dataSection: 'Données et Stockage',
+    dataUsage: 'Mode d\'Utilisation des Données',
+    dataUsageDescription: 'Contrôler la consommation de données',
+    autoDownload: 'Téléchargement Automatique des Médias',
+    autoDownloadDescription: 'Télécharger automatiquement les images et vidéos',
+    clearCache: 'Effacer le Cache à la Sortie',
+    clearCacheDescription: 'Supprimer les données mises en cache à la fermeture de l\'application',
+    
+    // Features
+    featuresSection: 'Fonctionnalités',
+    biometricAuth: 'Authentification Biométrique',
+    biometricAuthDescription: 'Utiliser Face ID ou Touch ID pour un accès sécurisé',
+    autoDarkSwitch: 'Mode Sombre Automatique',
+    autoDarkSwitchDescription: 'Changer automatiquement selon l\'heure de la journée',
+    
+    // Data usage options
+    dataStandard: 'Standard',
+    dataStandardDescription: 'Utilisation normale des données (par défaut)',
+    dataLow: 'Faible',
+    dataLowDescription: 'Réduire la consommation de données',
+    dataEconomy: 'Économie',
+    dataEconomyDescription: 'Utilisation minimale des données',
+    
+    // Notification levels
+    levelNone: 'Aucun',
+    levelNoneDescription: 'Désactiver toutes les notifications',
+    levelCritical: 'Seulement Critique',
+    levelCriticalDescription: 'Seulement les alertes critiques',
+    levelImportant: 'Important',
+    levelImportantDescription: 'Alertes importantes et critiques',
+    levelAll: 'Tout',
+    levelAllDescription: 'Toutes les notifications',
+    
+    // Buttons
+    resetPreferences: 'Réinitialiser les Préférences',
+    resetPreferencesConfirm: 'Réinitialiser toutes les préférences par défaut ?',
+    resetComplete: 'Préférences réinitialisées avec succès',
+    resetError: 'Échec de la réinitialisation des préférences',
   },
   home: {
     greeting: 'Bonjour, créateur Tamgora',

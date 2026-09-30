@@ -178,7 +178,11 @@ export function OnboardingWizard() {
             Skip for now
           </Link>
         </div>
-        <Progress value={progressValue} className="h-2" />
+        <Progress
+          value={progressValue}
+          className="h-2"
+          aria-label={`Onboarding progress: step ${step} of ${TOTAL_STEPS}`}
+        />
       </div>
 
       {step === 1 && (
@@ -195,11 +199,16 @@ export function OnboardingWizard() {
               name="role"
               render={({ field }) => (
                 <FormItem>
-                  <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
+                  <div
+                    role="group"
+                    aria-label="Choose your role"
+                    className="grid gap-3 sm:gap-4 sm:grid-cols-2"
+                  >
                     {(['CREATOR', 'CLIENT'] as const).map((r) => (
                       <button
                         key={r}
                         type="button"
+                        aria-pressed={field.value === r}
                         onClick={() => field.onChange(r)}
                         className={`rounded-lg border p-6 text-left transition-colors ${
                           field.value === r ? 'border-primary bg-primary/5' : 'hover:border-muted-foreground/40'

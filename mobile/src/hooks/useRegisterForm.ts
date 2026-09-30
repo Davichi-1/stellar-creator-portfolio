@@ -140,7 +140,9 @@ export function useRegisterForm(
   // ── Step 2 handlers ──────────────────────────────────────────────────────
 
   const setDisciplineValue = useCallback((d: string) => {
-    setDiscipline((prev) => ({ ...prev, discipline: d }));
+    setDiscipline((prev) =>
+      prev.discipline === d ? prev : { discipline: d, skills: [] }
+    );
   }, []);
 
   const toggleSkill = useCallback((skill: string) => {

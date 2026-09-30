@@ -5,6 +5,7 @@ export const metadata = {
   description: "Complete your profile setup",
 };
 
+/** Onboarding route — renders the multi-step `OnboardingWizard` for a new user's profile setup. */
 export default function OnboardingPage() {
   return <OnboardingWizard />;
 }

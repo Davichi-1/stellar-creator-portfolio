@@ -74,7 +74,8 @@ const PIN_LOCK_DURATION_MS = 30 * 60 * 1000; // 30 minutes
 // Hook
 // ---------------------------------------------------------------------------
 
-export function useWalletAuth() {
+export function useWalletAuth(options?: { autoStart?: boolean }) {
+  const autoStartRef = useRef(options?.autoStart !== false);
   const [state, setState] = useState<WalletAuthState>({
     status: "idle",
     session: null,
@@ -109,7 +110,7 @@ export function useWalletAuth() {
         category: "auth",
       });
 
-      if (support.available) {
+      if (support.available && autoStartRef.current) {
         await doBiometricAttempt();
       }
     })();
@@ -305,6 +306,7 @@ export function useWalletAuth() {
 
   return {
     ...state,
+    connect: fallbackToWallet,
     attemptBiometric,
     submitPin,
     fallbackToWallet,

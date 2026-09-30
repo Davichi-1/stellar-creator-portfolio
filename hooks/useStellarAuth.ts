@@ -67,17 +67,18 @@ export function useStellarAuth(): StellarAuth {
 
       // Persist to localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ publicKey: key }));
-    } catch (err: any) {
-      // Handle user cancellation or other Albedo errors
-      const message = err.message || 'Failed to connect with Albedo';
-      
-      // Albedo throws an object with a message if user closes the window
-      if (err.code === -1) {
+    } catch (err) {
+      // Albedo throws a plain object with `message` and, for a user-closed
+      // window, `code === -1` — not necessarily an `Error` instance.
+      const albedoErr = err as { message?: string; code?: number } | undefined;
+      const message = albedoErr?.message || 'Failed to connect with Albedo';
+
+      if (albedoErr?.code === -1) {
         setError('Connection cancelled by user');
       } else {
         setError(message);
       }
-      
+
       setPublicKey(null);
     } finally {
       setIsLoading(false);

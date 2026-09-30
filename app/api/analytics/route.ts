@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth/config'
 import {
   computeEarningsMetrics,
   computePerformanceMetrics,
@@ -22,13 +24,23 @@ const VALID_PRESETS = new Set(['7d', '30d', '90d', '1y', 'all'])
  * GET /api/analytics
  *
  * Query params:
- *   preset   – 7d | 30d | 90d | 1y | all  (default: 30d)
- *   startDate / endDate – ISO-8601 (overrides preset)
- *   granularity – daily | weekly | monthly (default: auto)
- *   format   – json | csv  (default: json)
+ * preset – 7d | 30d | 90d | 1y | all (default: 30d)
+ * startDate / endDate – ISO-8601 (overrides preset)
+ * granularity – daily | weekly | monthly (default: auto)
+ * format – json | csv (default: json)
  */
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl
+
+  // --- Authentication: extract userId from session -------------------------
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return NextResponse.json(
+      { error: 'Authentication required' },
+      { status: 401 },
+    )
+  }
+  const userId = session.user.id
 
   // --- Date range -----------------------------------------------------------
   let range: DateRange
@@ -70,7 +82,6 @@ export async function GET(req: NextRequest) {
           : 'monthly'
 
   // --- Data (mock fallback) -------------------------------------------------
-  const userId = 'user-1' // TODO: extract from session
   const bounties = generateMockBounties(40, userId)
   const applications = generateMockApplications(bounties, userId)
 

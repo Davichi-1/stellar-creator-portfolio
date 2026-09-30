@@ -10,12 +10,15 @@ import {
   PerformanceMetrics,
   SentryConfig,
 } from '../types/sentry';
+import { CrashMetricsAggregator, type CrashMetricsSnapshot } from './CrashMetricsAggregator';
+import { sendEnvelope } from './sentryTransport';
 
 export class SentryErrorTracker {
   private static instance: SentryErrorTracker;
   private config: SentryConfig | null = null;
   private breadcrumbs: BreadcrumbData[] = [];
   private isInitialized: boolean = false;
+  private readonly aggregator = new CrashMetricsAggregator();
 
   private constructor() {}
 
@@ -224,11 +227,94 @@ export class SentryErrorTracker {
   /**
    * Send data to Sentry (placeholder for actual implementation)
    */
-  private sendToSentry(type: string, data: any): void {
-    // This would be implemented with actual Sentry SDK integration
+  /**
+   * Transmits an event and folds it into the aggregate metrics (Issue #1389).
+   *
+   * This was a no-op that logged the DSN, so every captured crash was
+   * discarded — the tracker reported success while sending nothing.
+   *
+   * Deliberately fire-and-forget. `captureException` is called from the crash
+   * path and must not become async: awaiting a network round trip there would
+   * delay the error boundary's render, and on a fatal error the process may not
+   * survive long enough to await anything.
+   */
+  private sendToSentry(type: string, data: CrashMetrics): void {
+    this.aggregator.record(data);
+
     if (this.config?.enableDebug) {
-      console.log(`[Sentry] Would send ${type} to:`, this.config?.dsn);
+      console.log(`[Sentry] sending ${type} to`, this.config?.dsn);
     }
+
+    if (!this.config?.dsn) return;
+
+    void sendEnvelope(data, this.config).then((result) => {
+      if (!result.ok && this.config?.enableDebug) {
+        // Logged rather than retried: a queue of undelivered crash reports is
+        // its own subsystem (persistence, backoff, ordering), and a dropped
+        // report is a smaller problem than a half-built one.
+        console.warn(`[Sentry] delivery failed: ${result.error}`);
+      }
+    });
+  }
+
+  /**
+   * Opens a session for crash-free rate tracking.
+   *
+   * Call on app start and on foreground-after-background. Without sessions the
+   * aggregate rates have no denominator and report 1.
+   */
+  public startSession(sessionId: string, userId?: string): void {
+    this.aggregator.startSession(sessionId, userId);
+  }
+
+  /** Closes the current session without marking it crashed. */
+  public endSession(): void {
+    this.aggregator.endSession();
+  }
+
+  /**
+   * Aggregate crash metrics — crash-free session and user rates, and counts
+   * grouped by error type and severity.
+   *
+   * This is what answers "is this build crashing more than the last one?",
+   * which the individual-event stream cannot.
+   */
+  public getCrashMetrics(): CrashMetricsSnapshot {
+    return this.aggregator.snapshot();
+  }
+
+  /** Clears the aggregation window. */
+  public resetCrashMetrics(): void {
+    this.aggregator.reset();
+  }
+
+  /**
+   * Captures a fatal crash.
+   *
+   * Distinct from `captureException` because only `fatal` marks a session
+   * crashed — conflating handled errors with crashes makes the crash-free rate
+   * track logging volume rather than stability.
+   */
+  public captureFatal(error: Error, context: ErrorContext = {}): string {
+    if (!this.isInitialized) {
+      console.warn('[Sentry] Not initialized, cannot capture fatal');
+      return '';
+    }
+
+    const errorId = this.generateErrorId();
+    const metrics: CrashMetrics = {
+      timestamp: Date.now(),
+      errorId,
+      errorType: error.name || 'Unknown',
+      errorMessage: error.message,
+      stackTrace: error.stack,
+      context,
+      severityLevel: 'fatal',
+      breadcrumbs: this.getBreadcrumbs(),
+    };
+
+    this.sendToSentry('fatal', metrics);
+    return errorId;
   }
 
   /**

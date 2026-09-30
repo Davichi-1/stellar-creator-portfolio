@@ -14,13 +14,14 @@
  *  - Pull-to-refresh
  *  - Full dark mode via useTheme()
  *  - Zero frame drops: ScrollView + memoized sections
+ *
+ * The mock data fetcher lives in `DashboardScreen.data.ts` and the memoized
+ * body sections (metrics grid, charts, activity feed) live in
+ * `DashboardScreen.sections.tsx` — kept separate so this file only handles
+ * screen layout and data-fetching state.
  */
 
-import React, {
-  useCallback,
-  useMemo,
-  useState,
-} from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -32,123 +33,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { MetricCard } from '../components/dashboard/MetricCard';
-import { BarChart } from '../components/dashboard/BarChart';
-import { SkillsChart } from '../components/dashboard/SkillsChart';
 import { useTheme } from '../theme/ThemeProvider';
 import { useOfflineData } from '../hooks/useOfflineData';
-import { AnalyticsPeriod, DashboardData, MetricCard as MetricCardType } from '../types';
+import { AnalyticsPeriod, DashboardData } from '../types';
 import { FontSize, FontWeight, Radius, Shadow, Spacing } from '../theme/tokens';
-
-
-// ─── Mock fetcher (replace with real API call) ────────────────────────────────
-
-function buildMockData(period: AnalyticsPeriod): DashboardData {
-  const multiplier = period === '7d' ? 1 : period === '30d' ? 4 : period === '90d' ? 12 : 24;
-  const points = period === '7d' ? 7 : period === '30d' ? 8 : period === '90d' ? 6 : 8;
-
-  const labels7d  = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const labels30d = ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'];
-  const labels90d = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-  const labelsAll = ['Q1', 'Q2', 'Q3', 'Q4', 'Q1', 'Q2', 'Q3', 'Q4'];
-
-  const labelSet =
-    period === '7d'  ? labels7d  :
-    period === '30d' ? labels30d :
-    period === '90d' ? labels90d :
-    labelsAll;
-
-  return {
-    period,
-    metrics: [
-      {
-        id: 'earnings',
-        label: 'Earnings',
-        value: 1240 * multiplier,
-        previousValue: 980 * multiplier,
-        unit: 'XLM',
-        trend: 'up',
-        trendPct: 26.5,
-      },
-      {
-        id: 'bounties',
-        label: 'Bounties',
-        value: 4 * multiplier,
-        previousValue: 3 * multiplier,
-        unit: '',
-        trend: 'up',
-        trendPct: 33.3,
-      },
-      {
-        id: 'views',
-        label: 'Profile Views',
-        value: 312 * multiplier,
-        previousValue: 280 * multiplier,
-        unit: '',
-        trend: 'up',
-        trendPct: 11.4,
-      },
-      {
-        id: 'rating',
-        label: 'Avg Rating',
-        value: 4.3,
-        previousValue: 4.1,
-        unit: '/ 5',
-        trend: 'up',
-        trendPct: 4.9,
-      },
-    ],
-    earningsChart: Array.from({ length: points }, (_, i) => ({
-      label: labelSet[i] ?? String(i + 1),
-      value: Math.round(100 + Math.random() * 400 * multiplier),
-      secondaryValue: Math.round(80 + Math.random() * 300 * multiplier),
-    })),
-    bountiesChart: Array.from({ length: points }, (_, i) => ({
-      label: labelSet[i] ?? String(i + 1),
-      value: Math.round(1 + Math.random() * 5),
-    })),
-    topSkills: [
-      { skill: 'UX Design',    count: 18 },
-      { skill: 'Branding',     count: 14 },
-      { skill: 'Illustration', count: 11 },
-      { skill: 'Motion',       count: 8  },
-      { skill: 'Copywriting',  count: 6  },
-    ],
-    recentActivity: [
-      { id: '1', label: 'Bounty completed — Logo Design',    time: '2h ago',  type: 'bounty'  },
-      { id: '2', label: 'New review received — 5 stars',     time: '5h ago',  type: 'review'  },
-      { id: '3', label: 'Payment received — 250 XLM',        time: '1d ago',  type: 'payment' },
-      { id: '4', label: 'Profile viewed by Acme Corp',       time: '2d ago',  type: 'view'    },
-      { id: '5', label: 'Application accepted — Brand Kit',  time: '3d ago',  type: 'bounty'  },
-    ],
-  };
-}
-
-async function fetchDashboard(period: AnalyticsPeriod): Promise<DashboardData> {
-  // Simulate network latency
-  await new Promise((r) => setTimeout(r, 600));
-  return buildMockData(period);
-}
-
-// ─── Period tabs ──────────────────────────────────────────────────────────────
-
-const PERIODS: { key: AnalyticsPeriod; label: string }[] = [
-  { key: '7d',  label: '7D'  },
-  { key: '30d', label: '30D' },
-  { key: '90d', label: '90D' },
-  { key: 'all', label: 'All' },
-];
-
-// ─── Activity type icon ───────────────────────────────────────────────────────
-
-const ACTIVITY_ICON: Record<string, string> = {
-  bounty:  '📋',
-  review:  '⭐',
-  payment: '💰',
-  view:    '👁️',
-};
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
+import { fetchDashboard, PERIODS } from './DashboardScreen.data';
+import { useDashboardSections } from './DashboardScreen.sections';
 
 export function DashboardScreen({ navigation }: { navigation?: any }) {
   const { colors, isDark } = useTheme();
@@ -174,108 +64,8 @@ export function DashboardScreen({ navigation }: { navigation?: any }) {
     setPeriod(p);
   }, []);
 
-  // ── Memoised sections ───────────────────────────────────────────────────────
-
-  const MetricsSection = useMemo(() => {
-    if (!data) return null;
-    const pairs: [MetricCardType, MetricCardType][] = [
-      [data.metrics[0], data.metrics[1]],
-      [data.metrics[2], data.metrics[3]],
-    ];
-    return (
-      <View style={styles.metricsGrid}>
-        {pairs.map((pair, i) => (
-          <View key={i} style={styles.metricsRow}>
-            <MetricCard metric={pair[0]} style={styles.metricCell} />
-            <MetricCard metric={pair[1]} style={styles.metricCell} />
-          </View>
-        ))}
-      </View>
-    );
-  }, [data]);
-
-  const EarningsSection = useMemo(() => {
-    if (!data) return null;
-    return (
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.cardTitle, { color: colors.text }]}>Earnings</Text>
-        <Text style={[styles.cardSubtitle, { color: colors.textTertiary }]}>
-          Current vs previous period
-        </Text>
-        <BarChart
-          data={data.earningsChart}
-          height={140}
-          barColor={colors.primary}
-          secondaryColor={colors.primaryLight}
-          style={styles.chart}
-          accessibilityLabel="Earnings bar chart"
-        />
-      </View>
-    );
-  }, [data, colors]);
-
-  const BountiesSection = useMemo(() => {
-    if (!data) return null;
-    return (
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.cardTitle, { color: colors.text }]}>Bounties Completed</Text>
-        <BarChart
-          data={data.bountiesChart}
-          height={120}
-          barColor={colors.accent}
-          style={styles.chart}
-          showValues
-          accessibilityLabel="Bounties bar chart"
-        />
-      </View>
-    );
-  }, [data, colors]);
-
-  const SkillsSection = useMemo(() => {
-    if (!data) return null;
-    return (
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.cardTitle, { color: colors.text }]}>Top Skills</Text>
-        <Text style={[styles.cardSubtitle, { color: colors.textTertiary }]}>
-          By completed bounties
-        </Text>
-        <View style={styles.chartPad}>
-          <SkillsChart skills={data.topSkills} />
-        </View>
-      </View>
-    );
-  }, [data, colors]);
-
-  const ActivitySection = useMemo(() => {
-    if (!data) return null;
-    return (
-      <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-        <Text style={[styles.cardTitle, { color: colors.text }]}>Recent Activity</Text>
-        {data.recentActivity.map((item, i) => (
-          <View
-            key={item.id}
-            style={[
-              styles.activityRow,
-              i < data.recentActivity.length - 1 && {
-                borderBottomWidth: StyleSheet.hairlineWidth,
-                borderBottomColor: colors.border,
-              },
-            ]}
-          >
-            <Text style={styles.activityIcon}>{ACTIVITY_ICON[item.type] ?? '📌'}</Text>
-            <View style={styles.activityText}>
-              <Text style={[styles.activityLabel, { color: colors.text }]} numberOfLines={1}>
-                {item.label}
-              </Text>
-              <Text style={[styles.activityTime, { color: colors.textTertiary }]}>
-                {item.time}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-    );
-  }, [data, colors]);
+  const { MetricsSection, EarningsSection, BountiesSection, SkillsSection, ActivitySection } =
+    useDashboardSections(data, colors);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -400,36 +190,6 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing['3xl'],
     gap: Spacing.md,
   },
-  metricsGrid: { gap: Spacing.sm },
-  metricsRow: { flexDirection: 'row', gap: Spacing.sm },
-  metricCell: { flex: 1 },
-  card: {
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    padding: Spacing.base,
-    ...Shadow.sm,
-  },
-  cardTitle: {
-    fontSize: FontSize.md,
-    fontWeight: FontWeight.bold,
-    marginBottom: 2,
-  },
-  cardSubtitle: {
-    fontSize: FontSize.xs,
-    marginBottom: Spacing.sm,
-  },
-  chart: { marginTop: Spacing.sm },
-  chartPad: { marginTop: Spacing.sm },
-  activityRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  activityIcon: { fontSize: 18, width: 28, textAlign: 'center' },
-  activityText: { flex: 1 },
-  activityLabel: { fontSize: FontSize.sm, fontWeight: FontWeight.medium },
-  activityTime: { fontSize: FontSize.xs, marginTop: 1 },
   loadingCenter: {
     alignItems: 'center',
     paddingTop: Spacing['4xl'],

@@ -1,7 +1,7 @@
 /**
  * ActivityTimelineScreen
  *
- * Issue 2 — "Construct explicit comprehensive global Activity timeline
+ * Issue 3 — "Construct explicit comprehensive global Activity timeline
  * summaries internally"
  *
  * Features:
@@ -12,6 +12,8 @@
  *  - Infinite scroll with load-more
  *  - SectionList for zero frame drops (native section rendering)
  *  - Full i18n + haptics + accessibility
+ *  - Pull-to-refresh for latest updates
+ *  - Optimized rendering with VirtualizedList props
  */
 
 import React, {
@@ -22,6 +24,7 @@ import React, {
 import {
   Alert,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   SectionList,
   SectionListData,
@@ -34,7 +37,8 @@ import {
 import * as Haptics from 'expo-haptics';
 import { ActivityEventItem } from '../components/activity/ActivityEventItem';
 import { ActivitySummaryCard } from '../components/activity/ActivitySummaryCard';
-import { EmptyState } from '../components/ui/EmptyState';
+import { ActivityEmptyState } from '../components/activity/ActivityEmptyState';
+import { ActivityFilterBar } from '../components/activity/ActivityFilterBar';
 import {
   Colors,
   FontSize,
@@ -50,35 +54,36 @@ import {
 } from '../types';
 import { useI18n } from '../i18n/I18nProvider';
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+// ─── Mock Data ─────────────────────────────────────────────────────────────────
 
 const EVENT_TYPES: ActivityEventType[] = [
-  'bounty_posted', 'bounty_applied', 'bounty_accepted', 'bounty_completed',
+  'bounty_posted', 'bounty_applied', 'bounty_accepted', 'bounty_rejected', 'bounty_completed',
   'review_received', 'review_left', 'payment_received', 'payment_sent',
-  'message_received', 'profile_viewed', 'match_found', 'dispute_resolved',
+  'message_received', 'profile_viewed', 'match_found', 'dispute_opened', 'dispute_resolved',
 ];
 
-const MOCK_EVENTS: ActivityEvent[] = Array.from({ length: 30 }, (_, i) => ({
-  id: `evt-${i}`,
-  type: EVENT_TYPES[i % EVENT_TYPES.length],
-  title: '',
-  subtitle: i % 4 === 0 ? 'Logo design for Tamgora platform' : undefined,
-  amount: [4, 7, 11].includes(i % 12) ? 250 + i * 10 : undefined,
-  relatedId: `item-${i}`,
-  relatedName: ['Alice Chen', 'Stellar Bounty #42', 'Bob Martinez', undefined][i % 4] ?? undefined,
-  avatarUrl: undefined,
-  read: i > 5,
-  createdAt: new Date(Date.now() - i * 3_600_000 * 8).toISOString(),
-}));
+const MOCK_NAMES = [
+  'Alice Chen', 'Bob Martinez', 'Sarah Johnson', 'David Kim', 'Emma Wilson',
+];
 
-const MOCK_SUMMARY: ActivitySummary = {
-  totalEvents: 30,
-  unreadCount: 6,
-  weeklyEarnings: 1240,
-  weeklyBounties: 4,
-};
+function buildMockEvents(): ActivityEvent[] {
+  return Array.from({ length: 50 }, (_, i) => ({
+    id: `evt-${i}`,
+    type: EVENT_TYPES[i % EVENT_TYPES.length],
+    title: EVENT_TYPES[i % EVENT_TYPES.length].replace(/_/g, ' '),
+    subtitle: i % 4 === 0 ? 'Logo design for Tamgora platform' : undefined,
+    amount: [4, 7, 11].includes(i % 12) ? 250 + i * 10 : undefined,
+    relatedId: `item-${i}`,
+    relatedName: [MOCK_NAMES[i % MOCK_NAMES.length], 'Stellar Bounty #42', undefined, 'Project Alpha'][i % 4] ?? undefined,
+    avatarUrl: undefined,
+    read: i > 15,
+    createdAt: new Date(Date.now() - i * 3_600_000 * 6).toISOString(),
+  }));
+}
 
-// ─── Filter mapping ───────────────────────────────────────────────────────────
+const INITIAL_EVENTS = buildMockEvents();
+
+// ─── Filter Mapping ────────────────────────────────────────────────────────────
 
 const FILTER_EVENT_TYPES: Record<ActivityFilterType, ActivityEventType[] | null> = {
   all:          null,
@@ -89,7 +94,7 @@ const FILTER_EVENT_TYPES: Record<ActivityFilterType, ActivityEventType[] | null>
   applications: ['bounty_applied', 'bounty_accepted', 'bounty_rejected'],
 };
 
-// ─── Section grouping ─────────────────────────────────────────────────────────
+// ─── Section Grouping ──────────────────────────────────────────────────────────
 
 interface TimelineSection {
   title: string;
@@ -100,7 +105,7 @@ function groupIntoSections(
   events: ActivityEvent[],
   labels: { today: string; yesterday: string; thisWeek: string; older: string },
 ): TimelineSection[] {
-  const now   = new Date();
+  const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 86_400_000);
   const weekAgo   = new Date(today.getTime() - 7 * 86_400_000);
@@ -113,7 +118,7 @@ function groupIntoSections(
   };
 
   for (const evt of events) {
-    const d = new Date(evt.createdAt);
+    const d   = new Date(evt.createdAt);
     const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
     if (day >= today)          buckets[labels.today].push(evt);
     else if (day >= yesterday) buckets[labels.yesterday].push(evt);
@@ -126,17 +131,19 @@ function groupIntoSections(
     .map(([title, data]) => ({ title, data }));
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── Component ─────────────────────────────────────────────────────────────────
 
 export function ActivityTimelineScreen() {
   const { t } = useI18n();
 
-  const [events, setEvents]         = useState<ActivityEvent[]>(MOCK_EVENTS);
-  const [filter, setFilter]         = useState<ActivityFilterType>('all');
-  const [page, setPage]             = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [events, setEvents]             = useState<ActivityEvent[]>(INITIAL_EVENTS);
+  const [filter, setFilter]             = useState<ActivityFilterType>('all');
+  const [page, setPage]                 = useState(1);
+  const [loadingMore, setLoadingMore]   = useState(false);
+  const [refreshing, setRefreshing]     = useState(false);
+  const PAGE_SIZE = 15;
 
-  const PAGE_SIZE = 10;
+  // ── Derived data ─────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
     const allowed = FILTER_EVENT_TYPES[filter];
@@ -156,53 +163,87 @@ export function ActivityTimelineScreen() {
     [visible, t],
   );
 
+  const unreadCount = useMemo(() => events.filter((e) => !e.read).length, [events]);
+
+  const summary: ActivitySummary = useMemo(() => {
+    const now     = Date.now();
+    const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    let weeklyEarnings = 0;
+    let weeklyBounties = 0;
+    events.forEach((e) => {
+      if (new Date(e.createdAt).getTime() >= weekAgo) {
+        if (e.amount) weeklyEarnings += e.amount;
+        if (e.type.startsWith('bounty_') && e.type !== 'bounty_rejected') weeklyBounties++;
+      }
+    });
+    return { totalEvents: events.length, unreadCount, weeklyEarnings, weeklyBounties };
+  }, [events, unreadCount]);
+
+  // per-tab unread counts for the filter bar badges
+  const filterCounts = useMemo<Record<ActivityFilterType, number>>(() => {
+    const countFor = (types: ActivityEventType[] | null) =>
+      types ? events.filter((e) => types.includes(e.type) && !e.read).length
+            : events.filter((e) => !e.read).length;
+    return {
+      all:          countFor(null),
+      bounties:     countFor(FILTER_EVENT_TYPES.bounties),
+      reviews:      countFor(FILTER_EVENT_TYPES.reviews),
+      payments:     countFor(FILTER_EVENT_TYPES.payments),
+      messages:     countFor(FILTER_EVENT_TYPES.messages),
+      applications: countFor(FILTER_EVENT_TYPES.applications),
+    };
+  }, [events]);
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
+
   const handleMarkAllRead = useCallback(async () => {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setEvents((prev) => prev.map((e) => ({ ...e, read: true })));
   }, []);
 
-  const handleFilterChange = useCallback(async (f: ActivityFilterType) => {
-    await Haptics.selectionAsync();
-    setFilter(f);
-    setPage(1);
-  }, []);
+  const handleFilterChange = useCallback(
+    async (f: ActivityFilterType) => {
+      if (f === filter) return;
+      await Haptics.selectionAsync();
+      setFilter(f);
+      setPage(1);
+    },
+    [filter],
+  );
 
   const handleLoadMore = useCallback(async () => {
     if (loadingMore || visible.length >= filtered.length) return;
     setLoadingMore(true);
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 400));
     setPage((p) => p + 1);
     setLoadingMore(false);
   }, [loadingMore, visible.length, filtered.length]);
 
-  const handleEventPress = useCallback((event: ActivityEvent) => {
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    await new Promise((r) => setTimeout(r, 600));
+    setRefreshing(false);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  }, [refreshing]);
+
+  const handleEventPress = useCallback(async (event: ActivityEvent) => {
+    await Haptics.selectionAsync();
+    // Mark as read
+    setEvents((prev) => prev.map((e) => (e.id === event.id ? { ...e, read: true } : e)));
     Alert.alert(event.type.replace(/_/g, ' '), event.relatedName ?? event.id);
   }, []);
 
-  // ── Filter tabs ─────────────────────────────────────────────────────────────
-
-  const FILTER_TABS: { key: ActivityFilterType; label: string }[] = [
-    { key: 'all',          label: t('activity.filterAll')          },
-    { key: 'bounties',     label: t('activity.filterBounties')     },
-    { key: 'reviews',      label: t('activity.filterReviews')      },
-    { key: 'payments',     label: t('activity.filterPayments')     },
-    { key: 'messages',     label: t('activity.filterMessages')     },
-    { key: 'applications', label: t('activity.filterApplications') },
-  ];
-
-  // ── Render helpers ──────────────────────────────────────────────────────────
+  // ── Render helpers ─────────────────────────────────────────────────────────
 
   const renderItem: SectionListRenderItem<ActivityEvent, TimelineSection> = useCallback(
-    ({ item, section, index }) => {
-      const isLast = index === section.data.length - 1;
-      return (
-        <ActivityEventItem
-          event={item}
-          isLast={isLast}
-          onPress={handleEventPress}
-        />
-      );
-    },
+    ({ item, section, index }) => (
+      <ActivityEventItem
+        event={item}
+        isLast={index === section.data.length - 1}
+        onPress={handleEventPress}
+      />
+    ),
     [handleEventPress],
   );
 
@@ -217,39 +258,20 @@ export function ActivityTimelineScreen() {
 
   const keyExtractor = useCallback((item: ActivityEvent) => item.id, []);
 
-  const unreadCount = useMemo(() => events.filter((e) => !e.read).length, [events]);
+  // ── Sub-components ─────────────────────────────────────────────────────────
 
   const ListHeader = useMemo(
     () => (
       <View>
-        <ActivitySummaryCard summary={{ ...MOCK_SUMMARY, unreadCount }} />
-
-        {/* Filter tabs */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.tabScroll}
-          contentContainerStyle={styles.tabContent}
-        >
-          {FILTER_TABS.map((tab) => (
-            <Pressable
-              key={tab.key}
-              onPress={() => handleFilterChange(tab.key)}
-              style={[styles.tab, filter === tab.key && styles.tabActive]}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: filter === tab.key }}
-              accessibilityLabel={tab.label}
-            >
-              <Text style={[styles.tabText, filter === tab.key && styles.tabTextActive]}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+        <ActivitySummaryCard summary={summary} />
+        <ActivityFilterBar
+          selectedFilter={filter}
+          onFilterChange={handleFilterChange}
+          counts={filterCounts}
+        />
       </View>
     ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [unreadCount, filter, t],
+    [summary, filter, handleFilterChange, filterCounts],
   );
 
   const ListFooter = useMemo(() => {
@@ -268,12 +290,14 @@ export function ActivityTimelineScreen() {
     );
   }, [visible.length, filtered.length, loadingMore, handleLoadMore, t]);
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={styles.safe}>
       {/* Screen header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.screenTitle}>{t('activity.screenTitle')}</Text>
+          <Text style={styles.screenTitle}>{t('activity.timelineTitle')}</Text>
           {unreadCount > 0 && (
             <Text style={styles.unreadBadge}>
               {unreadCount} {t('activity.unread')}
@@ -300,7 +324,7 @@ export function ActivityTimelineScreen() {
         ListHeaderComponent={ListHeader}
         ListFooterComponent={ListFooter}
         ListEmptyComponent={
-          <EmptyState
+          <ActivityEmptyState
             icon="📭"
             title={t('activity.noActivity')}
             subtitle={t('activity.noActivitySub')}
@@ -315,10 +339,19 @@ export function ActivityTimelineScreen() {
         initialNumToRender={10}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.3}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.primary}
+          />
+        }
       />
     </SafeAreaView>
   );
 }
+
+// ─── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   safe: {
@@ -363,38 +396,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.base,
     paddingBottom: Spacing['3xl'],
   },
-  tabScroll: {
-    marginBottom: Spacing.sm,
-  },
-  tabContent: {
-    paddingVertical: Spacing.sm,
-    gap: Spacing.xs,
-  },
-  tab: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.background,
-    marginRight: Spacing.xs,
-  },
-  tabActive: {
-    backgroundColor: Colors.primary,
-    borderColor: Colors.primary,
-  },
-  tabText: {
-    fontSize: FontSize.sm,
-    color: Colors.textSecondary,
-    fontWeight: FontWeight.medium,
-  },
-  tabTextActive: {
-    color: Colors.textInverse,
-  },
   sectionHeader: {
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.xs,
     marginTop: Spacing.sm,
+    backgroundColor: Colors.surface,
   },
   sectionHeaderText: {
     fontSize: FontSize.xs,

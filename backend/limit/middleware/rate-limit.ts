@@ -34,15 +34,35 @@ export const ENDPOINT_RATE_LIMITS = {
 
 // ─── Prometheus Metrics ───────────────────────────────────────────────────
 
+/** Minimal shape of a prom-client Counter used by this module. */
+interface CounterMetric {
+  inc: (labels: Record<string, string>) => void;
+}
+
+/**
+ * Minimal shape of a prom-client Registry. Declared locally so prom-client
+ * stays an optional dependency.
+ */
+interface MetricsRegistry {
+  registerMetric: (metric: unknown) => void;
+}
+
+/** Request that may carry identity attached by upstream auth middleware. */
+interface AuthenticatedRequest extends Request {
+  user?: { id?: string; role?: string };
+  userId?: string;
+  role?: string;
+}
+
 let prometheusMetrics: {
-  rateLimitHitsTotal?: { inc: (labels: any) => void };
-  redisFallbackTotal?: { inc: (labels: any) => void };
+  rateLimitHitsTotal?: CounterMetric;
+  redisFallbackTotal?: CounterMetric;
 } = {};
 
 /**
  * Initialize Prometheus metrics (called once during app setup)
  */
-export function initPrometheusMetrics(register: any): void {
+export function initPrometheusMetrics(register: MetricsRegistry): void {
   try {
     // Import prometheus client if available
     const prometheus = require("prom-client");
@@ -114,7 +134,7 @@ interface RateLimitStore {
  */
 export class RateLimiter {
   private store: RateLimitStore = {};
-  private config: RateLimitConfig;
+  protected config: RateLimitConfig;
   private cleanupInterval: NodeJS.Timeout;
   private redisClient?: RedisClient;
 
@@ -158,7 +178,8 @@ export class RateLimiter {
    * Check if user has admin role (to bypass rate limits)
    */
   private isAdmin(req: Request): boolean {
-    const userRole = (req as any).user?.role || (req as any).role;
+    const authReq = req as AuthenticatedRequest;
+    const userRole = authReq.user?.role || authReq.role;
     return userRole === "admin" || userRole === "ADMIN";
   }
 
@@ -469,12 +490,13 @@ export class RequestQueue {
 
     if (item) {
       // Track when request completes
-      const originalSend = item.res.send;
-      item.res.send = function (data: any) {
+      const res = item.res;
+      const originalSend = res.send;
+      res.send = (body?: unknown): Response => {
         this.processing = Math.max(0, this.processing - 1);
         this.processNext();
-        return originalSend.call(this, data);
-      }.bind(this);
+        return originalSend.call(res, body);
+      };
 
       item.next();
       this.processNext();
@@ -532,10 +554,10 @@ export class AdaptiveRateLimiter extends RateLimiter {
     return async (req: Request, res: Response, next: NextFunction) => {
       // Compute adjusted limit at request start
       const adjustedLimit = this.getAdjustedLimit();
-      const originalMax = (this as any).config.maxRequests;
+      const originalMax = this.config.maxRequests;
 
       // Temporarily set adjusted limit
-      (this as any).config.maxRequests = adjustedLimit;
+      this.config.maxRequests = adjustedLimit;
 
       try {
         // Get parent middleware and await it completely before restoring config
@@ -543,7 +565,7 @@ export class AdaptiveRateLimiter extends RateLimiter {
         await parentMiddleware(req, res, next);
       } finally {
         // Restore original max after middleware completes
-        (this as any).config.maxRequests = originalMax;
+        this.config.maxRequests = originalMax;
       }
     };
   }
@@ -593,7 +615,8 @@ export function createEndpointRateLimiter(
     endpointName: endpoint,
     keyGenerator: (req: Request) => {
       // Use authenticated user ID if available, otherwise use IP + API key
-      const userId = (req as any).user?.id || (req as any).userId;
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user?.id || authReq.userId;
       const apiKey = req.headers["x-api-key"] as string;
       if (userId) {
         return `${endpoint}:${userId}`;

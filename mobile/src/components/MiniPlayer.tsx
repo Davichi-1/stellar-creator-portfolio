@@ -44,6 +44,8 @@ export function MiniPlayer() {
         <Pressable
           style={[styles.playButton, Shadow.sm, { backgroundColor: colors.primary }]}
           onPress={onTogglePlayPause}
+          accessibilityRole="button"
+          accessibilityLabel={isPlaying ? 'Pause' : 'Play'}
         >
           <Text style={[styles.playButtonText, { color: colors.textInverse }]}>
             {isPlaying ? '⏸' : '▶'}

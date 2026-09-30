@@ -18,11 +18,13 @@ describe('ROUTES', () => {
   });
 
   it('declares the expected app routes', () => {
-    expect(Object.keys(ROUTES.APP).sort()).toEqual(['AUDIO', 'HOME', 'MULTISIG', 'P2P']);
+    expect(Object.keys(ROUTES.APP).sort()).toEqual(['AUDIO', 'BIOMETRIC', 'HOME', 'MULTISIG', 'P2P', 'PREFERENCES']);
     expect(ROUTES.APP.HOME).toBe('/(app)/home');
     expect(ROUTES.APP.AUDIO).toBe('/(app)/audio');
     expect(ROUTES.APP.MULTISIG).toBe('/(app)/multisig');
     expect(ROUTES.APP.P2P).toBe('/(app)/p2p');
+    expect(ROUTES.APP.BIOMETRIC).toBe('/(app)/biometric-auth');
+    expect(ROUTES.APP.PREFERENCES).toBe('/(app)/preferences');
   });
 
   it('uses absolute, route-group-prefixed paths for every route', () => {
@@ -33,6 +35,8 @@ describe('ROUTES', () => {
       ROUTES.APP.AUDIO,
       ROUTES.APP.MULTISIG,
       ROUTES.APP.P2P,
+      ROUTES.APP.BIOMETRIC,
+      ROUTES.APP.PREFERENCES,
     ];
     for (const route of allRoutes) {
       expect(route).toMatch(/^\/\((auth|app)\)\//);
@@ -47,6 +51,8 @@ describe('ROUTES', () => {
       ROUTES.APP.AUDIO,
       ROUTES.APP.MULTISIG,
       ROUTES.APP.P2P,
+      ROUTES.APP.BIOMETRIC,
+      ROUTES.APP.PREFERENCES,
     ];
     expect(new Set(allRoutes).size).toBe(allRoutes.length);
   });

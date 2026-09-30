@@ -490,12 +490,20 @@ pub fn invalidate_reputation_cache(creator_address: &str) {
 // ---------------------------------------------------------------------------
 // Filtered / sorted / paginated review listing (admin + "all reviews" feeds)
 //
-// TODO: this whole section is a stub. `parse_review_filters` ignores its
-// query params and `fetch_all_reviews_from_db` / `get_filtered_creator_reviews_from_db`
-// return in-memory mock data instead of querying Postgres. Sorting,
-// filtering-by-shape and pagination themselves are real, working
-// implementations — only the two DB-facing functions and query-param parsing
-// need to be wired up before this is production-ready.
+// Query-param parsing (`parse_review_filters`) and filtering
+// (`filter_reviews`) are implemented (Issue #1392), alongside the sorting and
+// pagination that were already real.
+//
+// TODO: `fetch_all_reviews_from_db` and `get_filtered_creator_reviews_from_db`
+// still return in-memory seed data rather than querying Postgres. Wiring them
+// up needs a schema decision first, not just a query: `migrations/
+// 0002_create_reviews_tables.sql` defines `reviews` with `id UUID`,
+// `creator_id`, `bounty_id VARCHAR`, `title`, `body`, `reviewer_name` and no
+// `verified` column, while the `Review` struct here uses `id u64`,
+// `creator_address`, `reviewer_address`, `bounty_id Option<u64>`, `comment`
+// and `verified: bool`. Either the table or the struct has to move, and
+// `verified` — which `filter_reviews` reads — has nowhere to come from until
+// it does.
 // ---------------------------------------------------------------------------
 
 lazy_static::lazy_static! {
@@ -537,17 +545,177 @@ pub struct ReviewFilters {
     pub sort_order: Option<SortOrder>,
     pub page: Option<u32>,
     pub limit: Option<u32>,
+    /// Inclusive lower bound on star rating.
+    pub min_rating: Option<u8>,
+    /// Inclusive upper bound on star rating.
+    pub max_rating: Option<u8>,
+    /// When `Some(true)`, only reviews tied to a verified engagement.
+    pub verified_only: Option<bool>,
+    /// Inclusive lower bound on `created_at`.
+    pub created_after: Option<chrono::DateTime<chrono::Utc>>,
+    /// Inclusive upper bound on `created_at`.
+    pub created_before: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-/// TODO: stub — always returns the default (unfiltered, page 1) filter set,
-/// regardless of what's in `query`. Wire up real query-param parsing
-/// (rating range, verified-only, date range, sortBy/sortOrder/page/limit)
-/// here; return `Err(messages)` for invalid values the way the rest of this
-/// file's validation does.
+/// Largest page a caller may request.
+///
+/// Unbounded `limit` is a cheap way to ask the server to materialise every
+/// review ever written, so the parser clamps rather than trusting the caller.
+pub const MAX_REVIEW_PAGE_SIZE: u32 = 100;
+pub const DEFAULT_REVIEW_PAGE_SIZE: u32 = 10;
+
+/// Parse review list query parameters into a validated filter set.
+///
+/// Every invalid parameter is collected rather than returning on the first
+/// one. A caller who got three parameters wrong should learn that in one
+/// round trip instead of three, which is the same convention the rest of this
+/// file's validation follows.
+///
+/// # Absent versus invalid
+///
+/// An absent parameter leaves its field `None` and the caller applies a
+/// default. An unparseable parameter is an error rather than a silent fall
+/// back to the default: `?minRating=high` returning every review reads as the
+/// filter having been applied and matched everything, which is a wrong answer
+/// presented as a right one.
+///
+/// # Errors
+///
+/// Returns every validation message when one or more parameters are invalid.
 pub fn parse_review_filters(
-    _query: &HashMap<String, String>,
+    query: &HashMap<String, String>,
 ) -> Result<ReviewFilters, Vec<String>> {
-    Ok(ReviewFilters::default())
+    let mut errors: Vec<String> = Vec::new();
+    let mut filters = ReviewFilters::default();
+
+    // Treat an empty value as absent. `?verifiedOnly=` is what a form submits
+    // for an untouched field, and rejecting it would make the UI unusable.
+    let get = |key: &str| -> Option<&str> {
+        query.get(key).map(|v| v.trim()).filter(|v| !v.is_empty())
+    };
+
+    if let Some(raw) = get("sortBy") {
+        match raw.to_ascii_lowercase().as_str() {
+            "created_at" | "createdat" | "date" => filters.sort_by = Some(ReviewSortBy::CreatedAt),
+            "rating" => filters.sort_by = Some(ReviewSortBy::Rating),
+            other => errors.push(format!(
+                "sortBy must be one of: created_at, rating (received '{other}')"
+            )),
+        }
+    }
+
+    if let Some(raw) = get("sortOrder") {
+        match raw.to_ascii_lowercase().as_str() {
+            "asc" | "ascending" => filters.sort_order = Some(SortOrder::Asc),
+            "desc" | "descending" => filters.sort_order = Some(SortOrder::Desc),
+            other => errors.push(format!(
+                "sortOrder must be one of: asc, desc (received '{other}')"
+            )),
+        }
+    }
+
+    if let Some(raw) = get("page") {
+        match raw.parse::<u32>() {
+            // Page 0 is not a page. Silently treating it as 1 hides an
+            // off-by-one in the caller's pagination.
+            Ok(0) => errors.push("page must be 1 or greater".to_string()),
+            Ok(value) => filters.page = Some(value),
+            Err(_) => errors.push(format!("page must be a positive integer (received '{raw}')")),
+        }
+    }
+
+    if let Some(raw) = get("limit") {
+        match raw.parse::<u32>() {
+            Ok(0) => errors.push("limit must be 1 or greater".to_string()),
+            Ok(value) if value > MAX_REVIEW_PAGE_SIZE => errors.push(format!(
+                "limit must not exceed {MAX_REVIEW_PAGE_SIZE} (received {value})"
+            )),
+            Ok(value) => filters.limit = Some(value),
+            Err(_) => errors.push(format!("limit must be a positive integer (received '{raw}')")),
+        }
+    }
+
+    let mut parse_rating = |key: &str, errors: &mut Vec<String>| -> Option<u8> {
+        let raw = get(key)?;
+        match raw.parse::<u8>() {
+            Ok(value) if (1..=5).contains(&value) => Some(value),
+            Ok(value) => {
+                errors.push(format!("{key} must be between 1 and 5 (received {value})"));
+                None
+            }
+            Err(_) => {
+                errors.push(format!("{key} must be an integer between 1 and 5 (received '{raw}')"));
+                None
+            }
+        }
+    };
+
+    filters.min_rating = parse_rating("minRating", &mut errors);
+    filters.max_rating = parse_rating("maxRating", &mut errors);
+
+    if let (Some(min), Some(max)) = (filters.min_rating, filters.max_rating) {
+        if min > max {
+            // An inverted range matches nothing. Returning an empty list would
+            // look like "this creator has no reviews in that band".
+            errors.push(format!(
+                "minRating ({min}) must not be greater than maxRating ({max})"
+            ));
+        }
+    }
+
+    if let Some(raw) = get("verifiedOnly") {
+        match raw.to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" => filters.verified_only = Some(true),
+            "false" | "0" | "no" => filters.verified_only = Some(false),
+            other => errors.push(format!(
+                "verifiedOnly must be a boolean (received '{other}')"
+            )),
+        }
+    }
+
+    let mut parse_date =
+        |key: &str, errors: &mut Vec<String>| -> Option<chrono::DateTime<chrono::Utc>> {
+            let raw = get(key)?;
+            match chrono::DateTime::parse_from_rfc3339(raw) {
+                Ok(parsed) => Some(parsed.with_timezone(&chrono::Utc)),
+                Err(_) => {
+                    errors.push(format!(
+                        "{key} must be an RFC 3339 timestamp, e.g. 2026-01-31T00:00:00Z (received '{raw}')"
+                    ));
+                    None
+                }
+            }
+        };
+
+    filters.created_after = parse_date("createdAfter", &mut errors);
+    filters.created_before = parse_date("createdBefore", &mut errors);
+
+    if let (Some(after), Some(before)) = (filters.created_after, filters.created_before) {
+        if after > before {
+            errors.push(
+                "createdAfter must not be later than createdBefore".to_string(),
+            );
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(filters)
+    } else {
+        Err(errors)
+    }
+}
+
+/// Page size to apply for a filter set, with the caller's value clamped.
+pub fn effective_limit(filters: &ReviewFilters) -> u32 {
+    filters
+        .limit
+        .unwrap_or(DEFAULT_REVIEW_PAGE_SIZE)
+        .clamp(1, MAX_REVIEW_PAGE_SIZE)
+}
+
+/// Page number to apply for a filter set.
+pub fn effective_page(filters: &ReviewFilters) -> u32 {
+    filters.page.unwrap_or(1).max(1)
 }
 
 /// TODO: stub — returns the in-memory seed reviews rather than querying
@@ -557,9 +725,48 @@ pub async fn fetch_all_reviews_from_db() -> Vec<Review> {
     get_mock_reviews()
 }
 
-/// TODO: stub — every review currently passes through unfiltered.
-pub fn filter_reviews(reviews: &[Review], _filters: &ReviewFilters) -> Vec<Review> {
-    reviews.to_vec()
+/// Apply a parsed filter set to a review list.
+///
+/// Implemented alongside the parser because parsing filters nothing applies is
+/// worse than not parsing them: the caller sees their parameters accepted and
+/// the full list returned, and concludes the filter matched everything.
+///
+/// Bounds are inclusive on both ends, matching how the parameters read.
+pub fn filter_reviews(reviews: &[Review], filters: &ReviewFilters) -> Vec<Review> {
+    reviews
+        .iter()
+        .filter(|review| {
+            if let Some(min) = filters.min_rating {
+                if review.rating < min {
+                    return false;
+                }
+            }
+            if let Some(max) = filters.max_rating {
+                if review.rating > max {
+                    return false;
+                }
+            }
+            // `verified_only = Some(false)` means "only unverified", not "no
+            // filter" — the absent case is already `None`.
+            if let Some(verified) = filters.verified_only {
+                if review.verified != verified {
+                    return false;
+                }
+            }
+            if let Some(after) = filters.created_after {
+                if review.created_at < after {
+                    return false;
+                }
+            }
+            if let Some(before) = filters.created_before {
+                if review.created_at > before {
+                    return false;
+                }
+            }
+            true
+        })
+        .cloned()
+        .collect()
 }
 
 pub fn sort_reviews(reviews: &mut [Review], sort_by: &ReviewSortBy, sort_order: &SortOrder) {
@@ -848,5 +1055,226 @@ mod tests {
             guard.contains_key(&entry_key_check),
             "reputation entry should be recoverable after cache was poisoned"
         );
+    }
+
+    // ── Review filter parsing and application (Issue #1392) ──────────────
+
+    fn query(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect()
+    }
+
+    fn review(id: u64, rating: u8, verified: bool, days_ago: i64) -> Review {
+        Review {
+            id,
+            creator_address: "GCREATOR".to_string(),
+            reviewer_address: "GREVIEWER".to_string(),
+            bounty_id: Some(id),
+            rating,
+            comment: format!("review {id}"),
+            verified,
+            created_at: chrono::Utc::now() - chrono::Duration::days(days_ago),
+        }
+    }
+
+    #[test]
+    fn parse_review_filters_defaults_when_query_is_empty() {
+        let filters = parse_review_filters(&query(&[])).unwrap();
+        assert!(filters.sort_by.is_none());
+        assert!(filters.min_rating.is_none());
+        assert_eq!(effective_page(&filters), 1);
+        assert_eq!(effective_limit(&filters), DEFAULT_REVIEW_PAGE_SIZE);
+    }
+
+    #[test]
+    fn parse_review_filters_reads_every_supported_parameter() {
+        let filters = parse_review_filters(&query(&[
+            ("sortBy", "rating"),
+            ("sortOrder", "asc"),
+            ("page", "3"),
+            ("limit", "25"),
+            ("minRating", "2"),
+            ("maxRating", "4"),
+            ("verifiedOnly", "true"),
+            ("createdAfter", "2026-01-01T00:00:00Z"),
+            ("createdBefore", "2026-06-01T00:00:00Z"),
+        ]))
+        .unwrap();
+
+        assert_eq!(filters.sort_by, Some(ReviewSortBy::Rating));
+        assert_eq!(filters.sort_order, Some(SortOrder::Asc));
+        assert_eq!(filters.page, Some(3));
+        assert_eq!(filters.limit, Some(25));
+        assert_eq!(filters.min_rating, Some(2));
+        assert_eq!(filters.max_rating, Some(4));
+        assert_eq!(filters.verified_only, Some(true));
+        assert!(filters.created_after.is_some());
+        assert!(filters.created_before.is_some());
+    }
+
+    #[test]
+    fn parse_review_filters_treats_empty_values_as_absent() {
+        // An untouched form field submits an empty value; rejecting it would
+        // make the UI unusable.
+        let filters = parse_review_filters(&query(&[
+            ("verifiedOnly", ""),
+            ("minRating", "   "),
+        ]))
+        .unwrap();
+
+        assert!(filters.verified_only.is_none());
+        assert!(filters.min_rating.is_none());
+    }
+
+    #[test]
+    fn parse_review_filters_rejects_unparseable_values() {
+        // Falling back to the default would return every review and read as
+        // "the filter matched everything" — a wrong answer presented as right.
+        let errors = parse_review_filters(&query(&[("minRating", "high")])).unwrap_err();
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("minRating"));
+    }
+
+    #[test]
+    fn parse_review_filters_collects_every_error() {
+        let errors = parse_review_filters(&query(&[
+            ("sortBy", "colour"),
+            ("sortOrder", "sideways"),
+            ("page", "0"),
+            ("minRating", "9"),
+        ]))
+        .unwrap_err();
+
+        // One round trip, not four.
+        assert_eq!(errors.len(), 4);
+    }
+
+    #[test]
+    fn parse_review_filters_rejects_an_inverted_rating_range() {
+        // Matches nothing; an empty list would read as "no reviews in that band".
+        let errors = parse_review_filters(&query(&[("minRating", "4"), ("maxRating", "2")]))
+            .unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("must not be greater")));
+    }
+
+    #[test]
+    fn parse_review_filters_rejects_an_inverted_date_range() {
+        let errors = parse_review_filters(&query(&[
+            ("createdAfter", "2026-06-01T00:00:00Z"),
+            ("createdBefore", "2026-01-01T00:00:00Z"),
+        ]))
+        .unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("createdAfter")));
+    }
+
+    #[test]
+    fn parse_review_filters_rejects_a_limit_above_the_maximum() {
+        // Unbounded limit is a cheap way to ask for every review ever written.
+        let errors =
+            parse_review_filters(&query(&[("limit", "5000")])).unwrap_err();
+        assert!(errors[0].contains("must not exceed"));
+    }
+
+    #[test]
+    fn parse_review_filters_rejects_page_zero() {
+        let errors = parse_review_filters(&query(&[("page", "0")])).unwrap_err();
+        assert!(errors[0].contains("1 or greater"));
+    }
+
+    #[test]
+    fn parse_review_filters_accepts_boolean_and_sort_synonyms() {
+        for raw in ["true", "1", "yes"] {
+            let f = parse_review_filters(&query(&[("verifiedOnly", raw)])).unwrap();
+            assert_eq!(f.verified_only, Some(true), "{raw} should parse as true");
+        }
+        for raw in ["false", "0", "no"] {
+            let f = parse_review_filters(&query(&[("verifiedOnly", raw)])).unwrap();
+            assert_eq!(f.verified_only, Some(false), "{raw} should parse as false");
+        }
+        assert_eq!(
+            parse_review_filters(&query(&[("sortOrder", "DESC")]))
+                .unwrap()
+                .sort_order,
+            Some(SortOrder::Desc),
+            "sort order should be case-insensitive"
+        );
+    }
+
+    #[test]
+    fn filter_reviews_applies_the_rating_range_inclusively() {
+        let reviews = vec![
+            review(1, 1, true, 1),
+            review(2, 3, true, 1),
+            review(3, 5, true, 1),
+        ];
+        let filters = parse_review_filters(&query(&[("minRating", "3"), ("maxRating", "5")]))
+            .unwrap();
+
+        let filtered = filter_reviews(&reviews, &filters);
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered.iter().all(|r| r.rating >= 3));
+    }
+
+    #[test]
+    fn filter_reviews_distinguishes_verified_false_from_absent() {
+        let reviews = vec![review(1, 5, true, 1), review(2, 5, false, 1)];
+
+        let only_unverified =
+            parse_review_filters(&query(&[("verifiedOnly", "false")])).unwrap();
+        assert_eq!(filter_reviews(&reviews, &only_unverified).len(), 1);
+
+        // Absent means no filter, not "only unverified".
+        let unfiltered = parse_review_filters(&query(&[])).unwrap();
+        assert_eq!(filter_reviews(&reviews, &unfiltered).len(), 2);
+    }
+
+    #[test]
+    fn filter_reviews_applies_the_date_range() {
+        let reviews = vec![review(1, 5, true, 30), review(2, 5, true, 1)];
+        let cutoff = chrono::Utc::now() - chrono::Duration::days(7);
+
+        let filters = parse_review_filters(&query(&[(
+            "createdAfter",
+            &cutoff.to_rfc3339(),
+        )]))
+        .unwrap();
+
+        let filtered = filter_reviews(&reviews, &filters);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, 2);
+    }
+
+    #[test]
+    fn filter_reviews_combines_filters_conjunctively() {
+        let reviews = vec![
+            review(1, 5, true, 1),
+            review(2, 5, false, 1),
+            review(3, 2, true, 1),
+        ];
+        let filters =
+            parse_review_filters(&query(&[("minRating", "4"), ("verifiedOnly", "true")]))
+                .unwrap();
+
+        let filtered = filter_reviews(&reviews, &filters);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, 1);
+    }
+
+    #[test]
+    fn filter_reviews_returns_everything_for_default_filters() {
+        let reviews = vec![review(1, 1, false, 100), review(2, 5, true, 0)];
+        let filtered = filter_reviews(&reviews, &ReviewFilters::default());
+        assert_eq!(filtered.len(), 2);
+    }
+
+    #[test]
+    fn effective_limit_clamps_to_the_maximum() {
+        let filters = ReviewFilters {
+            limit: Some(u32::MAX),
+            ..Default::default()
+        };
+        assert_eq!(effective_limit(&filters), MAX_REVIEW_PAGE_SIZE);
     }
 }

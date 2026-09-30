@@ -1,5 +1,5 @@
 /**
- * formValidation — Issue #562
+ * formValidation — Issues #562, #1387
  * "Leverage specific generalized standard localized Mobile form validations identically securely"
  *
  * Features:
@@ -9,7 +9,29 @@
  *  - Secure input sanitization
  *  - Real-time and on-blur validation support
  *  - Custom validation rule composition
+ *
+ * # Localization (Issue #1387)
+ *
+ * The default messages are resolved through i18n at validation time, not at
+ * module load. A validator built once and reused — which is the normal pattern
+ * for a form schema — would otherwise capture whatever locale was active when
+ * the module was first imported and keep showing it after the user switches
+ * language.
+ *
+ * An explicit `message` argument still wins, so a caller with field-specific
+ * wording is unaffected.
  */
+
+import i18n from '../i18n';
+
+/** Resolve a validation message: explicit argument first, else the locale. */
+function message(
+  explicit: string | undefined,
+  key: string,
+  params?: Record<string, string | number>,
+): string {
+  return explicit ?? i18n.t(`validation.${key}`, params);
+}
 
 // ─── Validation Result ────────────────────────────────────────────────────────
 
@@ -26,12 +48,12 @@ export const Validators = {
   /**
    * Required field validator
    */
-  required: (message = 'This field is required'): ValidatorFn => {
+  required: (explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const trimmed = value.trim();
       return {
         isValid: trimmed.length > 0,
-        error: trimmed.length > 0 ? undefined : message,
+        error: trimmed.length > 0 ? undefined : message(explicitMessage, 'required'),
       };
     };
   },
@@ -39,13 +61,13 @@ export const Validators = {
   /**
    * Email validator with RFC 5322 compliance
    */
-  email: (message = 'Please enter a valid email address'): ValidatorFn => {
+  email: (explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const isValid = emailRegex.test(value.trim());
       return {
         isValid,
-        error: isValid ? undefined : message,
+        error: isValid ? undefined : message(explicitMessage, 'email'),
       };
     };
   },
@@ -53,12 +75,12 @@ export const Validators = {
   /**
    * Minimum length validator
    */
-  minLength: (min: number, message?: string): ValidatorFn => {
+  minLength: (min: number, explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const isValid = value.length >= min;
       return {
         isValid,
-        error: isValid ? undefined : message ?? `Minimum ${min} characters required`,
+        error: isValid ? undefined : message(explicitMessage, 'minLength', { min }),
       };
     };
   },
@@ -66,12 +88,12 @@ export const Validators = {
   /**
    * Maximum length validator
    */
-  maxLength: (max: number, message?: string): ValidatorFn => {
+  maxLength: (max: number, explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const isValid = value.length <= max;
       return {
         isValid,
-        error: isValid ? undefined : message ?? `Maximum ${max} characters allowed`,
+        error: isValid ? undefined : message(explicitMessage, 'maxLength', { max }),
       };
     };
   },
@@ -79,12 +101,12 @@ export const Validators = {
   /**
    * Pattern validator with custom regex
    */
-  pattern: (regex: RegExp, message = 'Invalid format'): ValidatorFn => {
+  pattern: (regex: RegExp, explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const isValid = regex.test(value);
       return {
         isValid,
-        error: isValid ? undefined : message,
+        error: isValid ? undefined : message(explicitMessage, 'pattern'),
       };
     };
   },
@@ -93,7 +115,7 @@ export const Validators = {
    * Password strength validator
    * Requires: min 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
    */
-  password: (message = 'Password must be at least 8 characters with uppercase, lowercase, number, and special character'): ValidatorFn => {
+  password: (explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const hasMinLength = value.length >= 8;
       const hasUppercase = /[A-Z]/.test(value);
@@ -105,7 +127,7 @@ export const Validators = {
 
       return {
         isValid,
-        error: isValid ? undefined : message,
+        error: isValid ? undefined : message(explicitMessage, 'password'),
       };
     };
   },
@@ -113,14 +135,14 @@ export const Validators = {
   /**
    * Phone number validator (international format)
    */
-  phone: (message = 'Please enter a valid phone number'): ValidatorFn => {
+  phone: (explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       // Accepts formats: +1234567890, (123) 456-7890, 123-456-7890
       const phoneRegex = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{1,9}$/;
       const isValid = phoneRegex.test(value.replace(/\s/g, ''));
       return {
         isValid,
-        error: isValid ? undefined : message,
+        error: isValid ? undefined : message(explicitMessage, 'phone'),
       };
     };
   },
@@ -128,13 +150,13 @@ export const Validators = {
   /**
    * URL validator
    */
-  url: (message = 'Please enter a valid URL'): ValidatorFn => {
+  url: (explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       try {
         new URL(value);
         return { isValid: true };
       } catch {
-        return { isValid: false, error: message };
+        return { isValid: false, error: message(explicitMessage, 'url') };
       }
     };
   },
@@ -142,12 +164,12 @@ export const Validators = {
   /**
    * Numeric validator
    */
-  numeric: (message = 'Please enter a valid number'): ValidatorFn => {
+  numeric: (explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const isValid = !isNaN(Number(value)) && value.trim() !== '';
       return {
         isValid,
-        error: isValid ? undefined : message,
+        error: isValid ? undefined : message(explicitMessage, 'numeric'),
       };
     };
   },
@@ -155,13 +177,13 @@ export const Validators = {
   /**
    * Range validator (for numbers)
    */
-  range: (min: number, max: number, message?: string): ValidatorFn => {
+  range: (min: number, max: number, explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const num = Number(value);
       const isValid = !isNaN(num) && num >= min && num <= max;
       return {
         isValid,
-        error: isValid ? undefined : message ?? `Value must be between ${min} and ${max}`,
+        error: isValid ? undefined : message(explicitMessage, 'range', { min, max }),
       };
     };
   },
@@ -169,12 +191,12 @@ export const Validators = {
   /**
    * Match validator (for password confirmation)
    */
-  match: (compareValue: string, message = 'Values do not match'): ValidatorFn => {
+  match: (compareValue: string, explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const isValid = value === compareValue;
       return {
         isValid,
-        error: isValid ? undefined : message,
+        error: isValid ? undefined : message(explicitMessage, 'match'),
       };
     };
   },
@@ -182,14 +204,14 @@ export const Validators = {
   /**
    * Stellar address validator
    */
-  stellarAddress: (message = 'Please enter a valid Stellar address'): ValidatorFn => {
+  stellarAddress: (explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       // Stellar addresses start with G and are 56 characters
       const stellarRegex = /^G[A-Z2-7]{55}$/;
       const isValid = stellarRegex.test(value.trim());
       return {
         isValid,
-        error: isValid ? undefined : message,
+        error: isValid ? undefined : message(explicitMessage, 'stellarAddress'),
       };
     };
   },
@@ -197,13 +219,13 @@ export const Validators = {
   /**
    * Username validator (alphanumeric, underscore, hyphen)
    */
-  username: (message = 'Username can only contain letters, numbers, underscores, and hyphens'): ValidatorFn => {
+  username: (explicitMessage?: string): ValidatorFn => {
     return (value: string) => {
       const usernameRegex = /^[a-zA-Z0-9_-]+$/;
       const isValid = usernameRegex.test(value);
       return {
         isValid,
-        error: isValid ? undefined : message,
+        error: isValid ? undefined : message(explicitMessage, 'username'),
       };
     };
   },

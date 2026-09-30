@@ -24,7 +24,13 @@ export const A11Y_LABELS = {
   success: 'Success',
 };
 
-// Keyboard navigation helper
+/**
+ * Returns a keydown handler for arrow-key/enter navigation between sibling
+ * DOM elements (e.g. a listbox or toolbar). Arrow keys move focus to the
+ * next/previous sibling of `document.activeElement`; Enter/Space calls
+ * `onSelect` with the currently focused element. `items` is accepted for
+ * API clarity but the handler navigates via DOM siblings, not the array.
+ */
 export function useKeyboardNavigation(
   items: HTMLElement[],
   onSelect?: (item: HTMLElement) => void
@@ -47,7 +53,11 @@ export function useKeyboardNavigation(
   };
 }
 
-// Focus trap hook
+/**
+ * Traps Tab/Shift+Tab focus cycling within `elementRef`'s subtree (e.g. for a
+ * modal dialog): tabbing past the last focusable element wraps to the first,
+ * and Shift+Tab on the first wraps to the last.
+ */
 export function useFocusTrap(elementRef: React.RefObject<HTMLElement>) {
   React.useEffect(() => {
     const element = elementRef.current;
@@ -83,7 +93,7 @@ export function useFocusTrap(elementRef: React.RefObject<HTMLElement>) {
   }, [elementRef]);
 }
 
-// Skip to content link
+/** Visually-hidden-until-focused link that jumps keyboard users past navigation to `#main-content`. */
 export function SkipToContent() {
   return (
     <a
@@ -95,7 +105,12 @@ export function SkipToContent() {
   );
 }
 
-// ARIA live region for announcements
+/**
+ * Visually-hidden `aria-live` region that announces `message` to screen
+ * readers without disrupting sighted layout. Use `role="alert"` for urgent,
+ * interrupting announcements; the default `"status"` is polite and waits for
+ * the screen reader to finish its current utterance.
+ */
 export function LiveRegion({ message, role = 'status' }: { message: string; role?: 'status' | 'alert' }) {
   return (
     <div
@@ -109,8 +124,13 @@ export function LiveRegion({ message, role = 'status' }: { message: string; role
   );
 }
 
-// Accessibility checker
+/** Static helpers for ad-hoc, in-browser accessibility auditing of a DOM subtree. */
 export class AccessibilityChecker {
+  /**
+   * Placeholder contrast check — always returns `true`. Computing real WCAG
+   * contrast ratios needs parsed RGB values and relative-luminance math; use
+   * a dedicated library (e.g. `color-contrast-checker`) for accurate results.
+   */
   static checkContrast(element: HTMLElement): boolean {
     const computed = window.getComputedStyle(element);
     const color = computed.color;
@@ -120,6 +140,12 @@ export class AccessibilityChecker {
     return true;
   }
 
+  /**
+   * Scans `container` for focusable elements and flags two common issues:
+   * interactive elements with neither an `aria-label` nor visible text, and
+   * `role="button"` elements missing the `aria-pressed`/`aria-expanded`
+   * state screen readers need to announce.
+   */
   static checkKeyboardNavigation(container: HTMLElement): {
     focusableElements: HTMLElement[];
     missingLabels: HTMLElement[];
@@ -147,6 +173,12 @@ export class AccessibilityChecker {
     };
   }
 
+  /**
+   * Produces a rough accessibility score (100 minus 20 per issue, 5 per
+   * warning, floored at 0) for `container` by checking for a heading
+   * structure, images missing `alt` text, and (via `checkContrast`, currently
+   * a placeholder) color contrast.
+   */
   static generateAccessibilityReport(container: HTMLElement): {
     score: number;
     issues: string[];

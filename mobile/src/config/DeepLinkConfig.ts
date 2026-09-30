@@ -276,21 +276,18 @@ export function useDeepLinkHandler(
 /**
  * Builds a deep-link URL for sharing or programmatic navigation.
  *
- * @example
- *   buildDeepLink('creator', 'alex-studio')
- *   // → 'stellar://creator/alex-studio'
+ * Implementation lives in ./deepLinks/ — this file re-exports it so existing
+ * imports of "config/DeepLinkConfig" keep working:
+ *   routes.ts             prefixes + react-navigation path map
+ *   linkingOptions.ts     LINKING_OPTIONS for <NavigationContainer>
+ *   parser.ts             DeepLinkRoute type + parseDeepLink()
+ *   useDeepLinkHandler.ts hook for handling incoming links
+ *   builders.ts           buildDeepLink() / buildUniversalLink()
  */
-export function buildDeepLink(...segments: string[]): string {
-  return `stellar://${segments.filter(Boolean).join("/")}`;
-}
 
-/**
- * Builds a universal (HTTPS) link for sharing outside the app.
- *
- * @example
- *   buildUniversalLink('creator', 'alex-studio')
- *   // → 'https://stellar.app/creator/alex-studio'
- */
-export function buildUniversalLink(...segments: string[]): string {
-  return `https://stellar.app/${segments.filter(Boolean).join("/")}`;
-}
+export { DEEP_LINK_PREFIXES, DEEP_LINK_CONFIG } from "./deepLinks/routes";
+export { LINKING_OPTIONS } from "./deepLinks/linkingOptions";
+export { parseDeepLink } from "./deepLinks/parser";
+export type { DeepLinkRoute } from "./deepLinks/parser";
+export { useDeepLinkHandler } from "./deepLinks/useDeepLinkHandler";
+export { buildDeepLink, buildUniversalLink } from "./deepLinks/builders";

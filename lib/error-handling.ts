@@ -105,6 +105,12 @@ export function formatApiError(
   };
 }
 
+/** An `Error` enriched with the API error code and any per-field validation errors. */
+export interface ApiHandledError extends Error {
+  code: string;
+  fieldErrors: Record<string, string>;
+}
+
 /**
  * Handle an API response and throw if it failed.
  * Automatically tracks errors to centralized monitoring.
@@ -115,9 +121,9 @@ export function handleApiResponse<T>(
 ): T {
   if (!response.success && response.error) {
     const formatted = formatApiError(response.error);
-    const error = new Error(formatted.userMessage);
-    (error as any).code = formatted.code;
-    (error as any).fieldErrors = formatted.fieldErrors;
+    const error = new Error(formatted.userMessage) as ApiHandledError;
+    error.code = formatted.code;
+    error.fieldErrors = formatted.fieldErrors;
 
     // Track error to centralized system
     void errorTracker.captureError(error, {

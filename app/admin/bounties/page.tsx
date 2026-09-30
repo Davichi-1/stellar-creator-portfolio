@@ -90,7 +90,7 @@ export default function AdminBountiesPage() {
 
       {flaggedCount > 0 && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-red-500/5 border border-red-500/20 text-sm">
-          <AlertTriangle size={16} className="text-red-500 shrink-0" />
+          <AlertTriangle size={16} aria-hidden="true" className="text-red-500 shrink-0" />
           <span className="font-medium text-red-600">{flaggedCount} flagged bounti{flaggedCount > 1 ? 'es' : 'y'} need review</span>
         </div>
       )}
@@ -98,11 +98,12 @@ export default function AdminBountiesPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-48">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search bounties..." className="pl-9 h-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Search size={15} aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Search bounties..." aria-label="Search bounties" className="pl-9 h-9" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <select
           className="h-9 px-3 rounded-md border border-input bg-background text-sm"
+          aria-label="Filter by status"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
         >
@@ -130,7 +131,7 @@ export default function AdminBountiesPage() {
               <thead>
                 <tr className="border-b border-border text-muted-foreground text-xs">
                   <th className="px-4 py-3 text-left w-8">
-                    <input type="checkbox" onChange={(e) => setSelected(e.target.checked ? new Set(filtered.map((b) => b.id)) : new Set())} />
+                    <input type="checkbox" aria-label="Select all bounties" onChange={(e) => setSelected(e.target.checked ? new Set(filtered.map((b) => b.id)) : new Set())} />
                   </th>
                   <th className="px-4 py-3 text-left">Bounty</th>
                   <th className="px-4 py-3 text-left">Posted By</th>
@@ -145,7 +146,7 @@ export default function AdminBountiesPage() {
                   <>
                     <tr key={bounty.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
-                        <input type="checkbox" checked={selected.has(bounty.id)} onChange={() => toggleSelect(bounty.id)} />
+                        <input type="checkbox" aria-label={`Select ${bounty.title}`} checked={selected.has(bounty.id)} onChange={() => toggleSelect(bounty.id)} />
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-medium">{bounty.title}</div>
@@ -161,15 +162,15 @@ export default function AdminBountiesPage() {
                         <div className="flex items-center gap-1">
                           {bounty.status === 'flagged' ? (
                             <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => approveBounty(bounty)}>
-                              <CheckCircle size={12} /> Approve
+                              <CheckCircle size={12} aria-hidden="true" /> Approve
                             </Button>
                           ) : (
                             <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => flagBounty(bounty)}>
-                              <Flag size={12} /> Flag
+                              <Flag size={12} aria-hidden="true" /> Flag
                             </Button>
                           )}
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" onClick={() => deleteBounty(bounty)}>
-                            <Trash2 size={12} />
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" aria-label={`Delete ${bounty.title}`} onClick={() => deleteBounty(bounty)}>
+                            <Trash2 size={12} aria-hidden="true" />
                           </Button>
                         </div>
                       </td>
@@ -177,7 +178,7 @@ export default function AdminBountiesPage() {
                     {bounty.flagReason && (
                       <tr key={`${bounty.id}-flag`} className="border-b border-border bg-red-500/5">
                         <td colSpan={7} className="px-4 py-2 text-xs text-red-600 flex items-center gap-1.5">
-                          <AlertTriangle size={12} /> {bounty.flagReason}
+                          <AlertTriangle size={12} aria-hidden="true" /> {bounty.flagReason}
                         </td>
                       </tr>
                     )}

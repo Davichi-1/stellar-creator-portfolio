@@ -1,504 +1,452 @@
 /**
- * ActivityScreen — Real-time activity feed with API integration
+ * ActivityScreen — Real-time activity feed with API integration.
  *
- * Features:
- * - Real activity data from backend APIs
- * - Pull-to-refresh for latest updates
- * - Filter by activity type
- * - Real-time notifications integration
+ * Delegates display to ActivityTimelineScreen for the full timeline view.
+ * This screen acts as the tab-level entry point, handles initial data
+ * loading and passes hydrated state down.
  */
 
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  Alert,
   Pressable,
   RefreshControl,
   SafeAreaView,
-  StatusBar,
+  SectionList,
+  SectionListData,
+  SectionListRenderItem,
   StyleSheet,
   Text,
   View,
-} from "react-native";
-import * as Haptics from "expo-haptics";
-import { useTheme } from "../theme/ThemeProvider";
-import { FontSize, FontWeight, Radius, Shadow, Spacing } from "../theme/tokens";
-import apiClient, { ApiError, NetworkError } from "../services/ApiClient";
-import { useToast } from "../context/ToastContext";
-import { formatDate } from "../utils";
+} from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useTheme } from '../theme/ThemeProvider';
+import {
+  Colors,
+  FontSize,
+  FontWeight,
+  Radius,
+  Shadow,
+  Spacing,
+} from '../theme/tokens';
+import {
+  ActivityEvent,
+  ActivityEventType,
+  ActivityFilterType,
+  ActivitySummary,
+} from '../types';
+import { ActivityEventItem } from '../components/activity/ActivityEventItem';
+import { ActivitySummaryCard } from '../components/activity/ActivitySummaryCard';
+import { ActivityFilterBar } from '../components/activity/ActivityFilterBar';
+import { ActivityEmptyState } from '../components/activity/ActivityEmptyState';
+import { activityTimelineService } from '../services/ActivityTimelineService';
+import { useI18n } from '../i18n/I18nProvider';
+import { useToast } from '../context/ToastContext';
+import { formatDate } from '../utils';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type ActivityType = 'bounty_created' | 'bounty_applied' | 'project_completed' | 'review_received' | 'message_received';
-
-interface Activity {
-  id: string;
-  type: ActivityType;
-  title: string;
-  description: string;
-  timestamp: string;
-  read: boolean;
-  metadata?: {
-    bountyId?: string;
-    projectId?: string;
-    userId?: string;
-    amount?: number;
-  };
-}
+// ─── Types ─────────────────────────────────────────────────────────────────────
 
 interface ActivityScreenProps {
-  onNavigate?: (screen: string, params?: any) => void;
+  onNavigate?: (screen: string, params?: Record<string, unknown>) => void;
 }
 
-// ─── Activity Type Config ─────────────────────────────────────────────────────
+// ─── Section helpers ───────────────────────────────────────────────────────────
 
-const ACTIVITY_CONFIG: Record<ActivityType, { icon: string; color: string; label: string }> = {
-  bounty_created: { icon: "🎯", color: "#3b82f6", label: "Bounty" },
-  bounty_applied: { icon: "📝", color: "#f59e0b", label: "Application" },
-  project_completed: { icon: "✅", color: "#22c55e", label: "Completed" },
-  review_received: { icon: "⭐", color: "#8b5cf6", label: "Review" },
-  message_received: { icon: "💬", color: "#06b6d4", label: "Message" },
+interface TimelineSection {
+  title: string;
+  data: ActivityEvent[];
+}
+
+const FILTER_EVENT_TYPES: Record<ActivityFilterType, ActivityEventType[] | null> = {
+  all:          null,
+  bounties:     ['bounty_posted', 'bounty_applied', 'bounty_accepted', 'bounty_rejected', 'bounty_completed'],
+  reviews:      ['review_received', 'review_left'],
+  payments:     ['payment_received', 'payment_sent'],
+  messages:     ['message_received'],
+  applications: ['bounty_applied', 'bounty_accepted', 'bounty_rejected'],
 };
 
-// ─── Activity Item Component ──────────────────────────────────────────────────
+function buildSections(
+  events: ActivityEvent[],
+  labels: { today: string; yesterday: string; thisWeek: string; older: string },
+): TimelineSection[] {
+  const now       = new Date();
+  const today     = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterday = new Date(today.getTime() - 86_400_000);
+  const weekAgo   = new Date(today.getTime() - 7 * 86_400_000);
 
-const ActivityItem = React.memo(({ 
-  item, 
-  colors,
-  onPress 
-}: { 
-  item: Activity; 
-  colors: any;
-  onPress: (item: Activity) => void;
-}) => {
-  const config = ACTIVITY_CONFIG[item.type];
-  
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.activityItem,
-        {
-          backgroundColor: colors.surface,
-          borderLeftColor: config.color,
-          opacity: item.read ? 0.7 : 1,
-        },
-        pressed && { opacity: 0.5 },
-      ]}
-      onPress={() => onPress(item)}
-    >
-      <View style={styles.activityHeader}>
-        <Text style={styles.activityIcon}>{config.icon}</Text>
-        <View style={styles.activityContent}>
-          <Text style={[styles.activityTitle, { color: colors.text }]} numberOfLines={1}>
-            {item.title}
-          </Text>
-          <Text style={[styles.activityDescription, { color: colors.textSecondary }]} numberOfLines={2}>
-            {item.description}
-          </Text>
-        </View>
-        <View style={styles.activityMeta}>
-          <Text style={[styles.activityTime, { color: colors.textTertiary }]}>
-            {formatTime(item.timestamp)}
-          </Text>
-          {!item.read && <View style={[styles.unreadDot, { backgroundColor: config.color }]} />}
-        </View>
-      </View>
-    </Pressable>
-  );
-});
+  const buckets: Record<string, ActivityEvent[]> = {
+    [labels.today]:     [],
+    [labels.yesterday]: [],
+    [labels.thisWeek]:  [],
+    [labels.older]:     [],
+  };
 
-// ─── Filter Tabs ──────────────────────────────────────────────────────────────
+  for (const evt of events) {
+    const d   = new Date(evt.createdAt);
+    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    if (day >= today)          buckets[labels.today].push(evt);
+    else if (day >= yesterday) buckets[labels.yesterday].push(evt);
+    else if (day >= weekAgo)   buckets[labels.thisWeek].push(evt);
+    else                       buckets[labels.older].push(evt);
+  }
 
-const FilterTabs = React.memo(({
-  selectedFilter,
-  onFilterChange,
-  colors,
-}: {
-  selectedFilter: ActivityType | 'all';
-  onFilterChange: (filter: ActivityType | 'all') => void;
-  colors: any;
-}) => {
-  const filters: Array<{ key: ActivityType | 'all'; label: string }> = [
-    { key: 'all', label: 'All' },
-    { key: 'bounty_created', label: 'Bounties' },
-    { key: 'bounty_applied', label: 'Applications' },
-    { key: 'project_completed', label: 'Projects' },
-    { key: 'review_received', label: 'Reviews' },
-  ];
+  return Object.entries(buckets)
+    .filter(([, data]) => data.length > 0)
+    .map(([title, data]) => ({ title, data }));
+}
 
-  return (
-    <View style={styles.filterContainer}>
-      <FlatList
-        data={filters}
-        keyExtractor={(item) => item.key}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.filterContent}
-        renderItem={({ item }) => (
-          <Pressable
-            style={[
-              styles.filterTab,
-              {
-                backgroundColor: selectedFilter === item.key ? colors.primary : colors.surface,
-                borderColor: colors.border,
-              },
-            ]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              onFilterChange(item.key);
-            }}
-          >
-            <Text
-              style={[
-                styles.filterTabText,
-                { color: selectedFilter === item.key ? 'white' : colors.textSecondary },
-              ]}
-            >
-              {item.label}
-            </Text>
-          </Pressable>
-        )}
-      />
-    </View>
-  );
-});
-
-// ─── Main Screen Component ────────────────────────────────────────────────────
+// ─── Component ─────────────────────────────────────────────────────────────────
 
 export function ActivityScreen({ onNavigate }: ActivityScreenProps) {
-  const { colors, isDark } = useTheme();
+  const { t } = useI18n();
   const { showError } = useToast();
-  
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [selectedFilter, setSelectedFilter] = useState<ActivityType | 'all'>('all');
-  const [error, setError] = useState<string | null>(null);
 
-  // Mock activities until real API is available
-  const mockActivities: Activity[] = [
-    {
-      id: '1',
-      type: 'bounty_created',
-      title: 'New Bounty: Mobile App Design',
-      description: 'A new bounty for $2,500 has been posted for mobile app UI design.',
-      timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-      read: false,
-      metadata: { bountyId: 'bounty-1', amount: 2500 },
-    },
-    {
-      id: '2', 
-      type: 'bounty_applied',
-      title: 'Application Submitted',
-      description: 'You successfully applied to "Brand Identity Redesign" bounty.',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-      read: false,
-      metadata: { bountyId: 'bounty-2' },
-    },
-    {
-      id: '3',
-      type: 'review_received',
-      title: 'New Review Received',
-      description: 'Sarah Johnson left you a 5-star review for the recent project.',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-      read: true,
-      metadata: { userId: 'user-123' },
-    },
-    {
-      id: '4',
-      type: 'project_completed',
-      title: 'Project Completed',
-      description: 'Congratulations! You completed "E-commerce Dashboard" project.',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-      read: true,
-      metadata: { projectId: 'project-456', amount: 1200 },
-    },
-    {
-      id: '5',
-      type: 'message_received',
-      title: 'New Message',
-      description: 'Alex Chen sent you a message about the ongoing project.',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
-      read: true,
-      metadata: { userId: 'user-789' },
-    },
-  ];
+  const [events, setEvents]           = useState<ActivityEvent[]>([]);
+  const [filter, setFilter]           = useState<ActivityFilterType>('all');
+  const [page, setPage]               = useState(1);
+  const [loading, setLoading]         = useState(true);
+  const [refreshing, setRefreshing]   = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const loadActivities = useCallback(async (isRefresh = false) => {
+  const PAGE_SIZE = 15;
+
+  // ── Data loading ───────────────────────────────────────────────────────────
+
+  const loadInitial = useCallback(async () => {
     try {
-      if (!isRefresh) setLoading(true);
-      setError(null);
-
-      // TODO: Replace with real API call
-      // const response = await apiClient.getActivities({ limit: 50 });
-      
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      setActivities(mockActivities);
+      setLoading(true);
+      const data = activityTimelineService.generateMockEvents(50);
+      activityTimelineService['events'] = data; // hydrate service
+      setEvents(data);
     } catch (err) {
-      const errorMessage = err instanceof ApiError
-        ? err.message
-        : err instanceof NetworkError
-        ? "Network connection failed. Please check your connection."
-        : "Failed to load activities. Please try again.";
-      
-      setError(errorMessage);
-      showError("Error", errorMessage);
+      showError?.('Error', t('common.error'));
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
-  }, [showError]);
+  }, [showError, t]);
 
-  useEffect(() => {
-    loadActivities();
-  }, [loadActivities]);
+  useEffect(() => { loadInitial(); }, [loadInitial]);
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = useCallback(async () => {
+    if (refreshing) return;
     setRefreshing(true);
-    loadActivities(true);
-  }, [loadActivities]);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const data = activityTimelineService.generateMockEvents(50);
+    setEvents(data);
+    setPage(1);
+    setRefreshing(false);
+  }, [refreshing]);
 
-  const handleActivityPress = useCallback((activity: Activity) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
-    // Mark as read
-    setActivities(prev => prev.map(item => 
-      item.id === activity.id ? { ...item, read: true } : item
-    ));
+  // ── Derived data ────────────────────────────────────────────────────────────
 
-    // Navigate based on activity type
-    switch (activity.type) {
-      case 'bounty_created':
-      case 'bounty_applied':
-        onNavigate?.('BountyDetails', { bountyId: activity.metadata?.bountyId });
-        break;
-      case 'project_completed':
-        onNavigate?.('ProjectDetails', { projectId: activity.metadata?.projectId });
-        break;
-      case 'review_received':
-        onNavigate?.('ReviewDetails', { userId: activity.metadata?.userId });
-        break;
-      case 'message_received':
-        onNavigate?.('Messages', { userId: activity.metadata?.userId });
-        break;
-    }
-  }, [onNavigate]);
+  const filtered = useMemo(() => {
+    const allowed = FILTER_EVENT_TYPES[filter];
+    return allowed ? events.filter((e) => allowed.includes(e.type)) : events;
+  }, [events, filter]);
 
-  const filteredActivities = selectedFilter === 'all' 
-    ? activities 
-    : activities.filter(activity => activity.type === selectedFilter);
+  const visible = useMemo(
+    () => filtered.slice(0, page * PAGE_SIZE),
+    [filtered, page],
+  );
 
-  const unreadCount = activities.filter(activity => !activity.read).length;
+  const sections = useMemo(
+    () =>
+      buildSections(visible, {
+        today:     t('activity.todaySection'),
+        yesterday: t('activity.yesterdaySection'),
+        thisWeek:  t('activity.thisWeekSection'),
+        older:     t('activity.olderSection'),
+      }),
+    [visible, t],
+  );
+
+  const unreadCount = useMemo(() => events.filter((e) => !e.read).length, [events]);
+
+  const summary: ActivitySummary = useMemo(() => {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    let weeklyEarnings = 0;
+    let weeklyBounties = 0;
+    events.forEach((e) => {
+      if (new Date(e.createdAt).getTime() >= weekAgo) {
+        if (e.amount) weeklyEarnings += e.amount;
+        if (e.type.startsWith('bounty_') && e.type !== 'bounty_rejected') weeklyBounties++;
+      }
+    });
+    return { totalEvents: events.length, unreadCount, weeklyEarnings, weeklyBounties };
+  }, [events, unreadCount]);
+
+  const filterCounts = useMemo<Record<ActivityFilterType, number>>(() => {
+    const countFor = (types: ActivityEventType[] | null) =>
+      types ? events.filter((e) => types.includes(e.type) && !e.read).length
+            : events.filter((e) => !e.read).length;
+    return {
+      all:          countFor(null),
+      bounties:     countFor(FILTER_EVENT_TYPES.bounties),
+      reviews:      countFor(FILTER_EVENT_TYPES.reviews),
+      payments:     countFor(FILTER_EVENT_TYPES.payments),
+      messages:     countFor(FILTER_EVENT_TYPES.messages),
+      applications: countFor(FILTER_EVENT_TYPES.applications),
+    };
+  }, [events]);
+
+  // ── Handlers ────────────────────────────────────────────────────────────────
+
+  const handleMarkAllRead = useCallback(async () => {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setEvents((prev) => prev.map((e) => ({ ...e, read: true })));
+  }, []);
+
+  const handleFilterChange = useCallback(
+    async (f: ActivityFilterType) => {
+      if (f === filter) return;
+      await Haptics.selectionAsync();
+      setFilter(f);
+      setPage(1);
+    },
+    [filter],
+  );
+
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMore || visible.length >= filtered.length) return;
+    setLoadingMore(true);
+    await new Promise((r) => setTimeout(r, 300));
+    setPage((p) => p + 1);
+    setLoadingMore(false);
+  }, [loadingMore, visible.length, filtered.length]);
+
+  const handleEventPress = useCallback(
+    async (event: ActivityEvent) => {
+      await Haptics.selectionAsync();
+      setEvents((prev) =>
+        prev.map((e) => (e.id === event.id ? { ...e, read: true } : e)),
+      );
+      // Navigate based on type
+      switch (event.type) {
+        case 'bounty_posted':
+        case 'bounty_applied':
+        case 'bounty_accepted':
+        case 'bounty_completed':
+          onNavigate?.('BountyDetail', { bountyId: event.relatedId });
+          break;
+        case 'message_received':
+          onNavigate?.('Messaging', { conversationId: event.relatedId });
+          break;
+        default:
+          break;
+      }
+    },
+    [onNavigate],
+  );
+
+  // ── Render helpers ─────────────────────────────────────────────────────────
+
+  const renderItem: SectionListRenderItem<ActivityEvent, TimelineSection> = useCallback(
+    ({ item, section, index }) => (
+      <ActivityEventItem
+        event={item}
+        isLast={index === section.data.length - 1}
+        onPress={handleEventPress}
+      />
+    ),
+    [handleEventPress],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: SectionListData<ActivityEvent, TimelineSection> }) => (
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionHeaderText}>{section.title}</Text>
+      </View>
+    ),
+    [],
+  );
+
+  const keyExtractor = useCallback((item: ActivityEvent) => item.id, []);
+
+  const ListHeader = useMemo(
+    () => (
+      <View>
+        <ActivitySummaryCard summary={summary} />
+        <ActivityFilterBar
+          selectedFilter={filter}
+          onFilterChange={handleFilterChange}
+          counts={filterCounts}
+        />
+      </View>
+    ),
+    [summary, filter, handleFilterChange, filterCounts],
+  );
+
+  const ListFooter = useMemo(() => {
+    if (visible.length >= filtered.length) return null;
+    return (
+      <Pressable
+        onPress={handleLoadMore}
+        style={({ pressed }) => [styles.loadMoreBtn, pressed && { opacity: 0.7 }]}
+        accessibilityRole="button"
+        accessibilityLabel={t('activity.loadMore')}
+      >
+        <Text style={styles.loadMoreText}>
+          {loadingMore ? t('activity.loadingMore') : t('activity.loadMore')}
+        </Text>
+      </Pressable>
+    );
+  }, [visible.length, filtered.length, loadingMore, handleLoadMore, t]);
+
+  // ── Loading skeleton ────────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-        <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-        
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Activity</Text>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.header}>
+          <Text style={styles.screenTitle}>{t('activity.screenTitle')}</Text>
         </View>
-
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
-            Loading activities...
-          </Text>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={styles.loadingText}>{t('activity.loading')}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ── Main render ─────────────────────────────────────────────────────────────
+
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
-      
+    <SafeAreaView style={styles.safe}>
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Activity</Text>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.screenTitle}>{t('activity.screenTitle')}</Text>
+          {unreadCount > 0 && (
+            <Text style={styles.unreadBadge}>
+              {unreadCount} {t('activity.unread')}
+            </Text>
+          )}
+        </View>
         {unreadCount > 0 && (
-          <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
-            <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-          </View>
+          <Pressable
+            onPress={handleMarkAllRead}
+            style={({ pressed }) => [styles.markReadBtn, pressed && { opacity: 0.7 }]}
+            accessibilityRole="button"
+            accessibilityLabel={t('activity.markAllRead')}
+          >
+            <Text style={styles.markReadText}>{t('activity.markAllRead')}</Text>
+          </Pressable>
         )}
       </View>
 
-      {/* Filter Tabs */}
-      <FilterTabs
-        selectedFilter={selectedFilter}
-        onFilterChange={setSelectedFilter}
-        colors={colors}
-      />
-
-      {/* Activities List */}
-      <FlatList
-        data={filteredActivities}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <ActivityItem
-            item={item}
-            colors={colors}
-            onPress={handleActivityPress}
-          />
-        )}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primary}
+      {/* Timeline SectionList */}
+      <SectionList
+        sections={sections}
+        renderItem={renderItem}
+        renderSectionHeader={renderSectionHeader}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={ListHeader}
+        ListFooterComponent={ListFooter}
+        ListEmptyComponent={
+          <ActivityEmptyState
+            icon="📭"
+            title={t('activity.noActivity')}
+            subtitle={t('activity.noActivitySub')}
           />
         }
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📱</Text>
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No Activity</Text>
-            <Text style={[styles.emptyDescription, { color: colors.textSecondary }]}>
-              Your recent activity will appear here
-            </Text>
-          </View>
+        stickySectionHeadersEnabled={false}
+        removeClippedSubviews
+        maxToRenderPerBatch={8}
+        windowSize={12}
+        initialNumToRender={10}
+        onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.3}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Colors.primary}
+          />
         }
       />
     </SafeAreaView>
   );
 }
 
-// ─── Utility Functions ────────────────────────────────────────────────────────
-
-function formatTime(timestamp: string): string {
-  const now = new Date();
-  const time = new Date(timestamp);
-  const diffMs = now.getTime() - time.getTime();
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m`;
-  if (diffHours < 24) return `${diffHours}h`;
-  if (diffDays < 7) return `${diffDays}d`;
-  return formatDate(time);
-}
-
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// ─── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: {
+  safe: {
     flex: 1,
+    backgroundColor: Colors.surface,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.md,
+    paddingTop: Spacing.base,
+    paddingBottom: Spacing.sm,
+    backgroundColor: Colors.background,
     borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Colors.border,
   },
-  headerTitle: {
-    fontSize: FontSize.xl,
+  screenTitle: {
+    fontSize: FontSize['2xl'],
     fontWeight: FontWeight.bold,
+    color: Colors.text,
   },
   unreadBadge: {
-    minWidth: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing.xs,
-  },
-  unreadBadgeText: {
     fontSize: FontSize.xs,
-    fontWeight: FontWeight.bold,
-    color: 'white',
+    color: Colors.primary,
+    fontWeight: FontWeight.semibold,
+    marginTop: 2,
   },
-  filterContainer: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  filterContent: {
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.sm,
-    gap: Spacing.xs,
-  },
-  filterTab: {
+  markReadBtn: {
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.xs,
     borderRadius: Radius.full,
     borderWidth: 1,
+    borderColor: Colors.primary,
   },
-  filterTabText: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.medium,
+  markReadText: {
+    fontSize: FontSize.xs,
+    color: Colors.primary,
+    fontWeight: FontWeight.semibold,
   },
   listContent: {
+    paddingHorizontal: Spacing.base,
+    paddingBottom: Spacing['3xl'],
+  },
+  sectionHeader: {
     paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.xs,
+    marginTop: Spacing.sm,
+    backgroundColor: Colors.surface,
   },
-  activityItem: {
-    marginHorizontal: Spacing.base,
-    marginVertical: Spacing.xs,
-    borderRadius: Radius.lg,
-    borderLeftWidth: 4,
-    ...Shadow.sm,
-  },
-  activityHeader: {
-    flexDirection: 'row',
-    padding: Spacing.base,
-  },
-  activityIcon: {
-    fontSize: 20,
-    marginRight: Spacing.sm,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityTitle: {
-    fontSize: FontSize.base,
-    fontWeight: FontWeight.semibold,
-    marginBottom: Spacing.xs,
-  },
-  activityDescription: {
-    fontSize: FontSize.sm,
-    lineHeight: 18,
-  },
-  activityMeta: {
-    alignItems: 'flex-end',
-  },
-  activityTime: {
+  sectionHeaderText: {
     fontSize: FontSize.xs,
-    marginBottom: Spacing.xs,
+    fontWeight: FontWeight.bold,
+    color: Colors.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
   },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  loadMoreBtn: {
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+  },
+  loadMoreText: {
+    fontSize: FontSize.base,
+    color: Colors.primary,
+    fontWeight: FontWeight.semibold,
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.md,
   },
   loadingText: {
     fontSize: FontSize.base,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingTop: 80,
-    paddingHorizontal: Spacing.xl,
-    gap: Spacing.md,
-  },
-  emptyIcon: {
-    fontSize: 48,
-  },
-  emptyTitle: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
-  },
-  emptyDescription: {
-    fontSize: FontSize.base,
-    textAlign: 'center',
-    lineHeight: 22,
+    color: Colors.textSecondary,
   },
 });

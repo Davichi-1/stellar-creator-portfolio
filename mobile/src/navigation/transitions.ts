@@ -37,6 +37,9 @@ export const Transitions = {
 
   /** No animation — instant swap (tab switches, deep links). */
   none: 'none' as StackAnimationTypes,
+
+  /** Custom parallax slide — liquid layout with depth perception. */
+  parallaxSlide: 'custom' as StackAnimationTypes,
 } as const;
 
 export type TransitionName = keyof typeof Transitions;
@@ -46,21 +49,71 @@ export type TransitionName = keyof typeof Transitions;
 /**
  * Assign a transition to each screen by name.
  * Import this in AppNavigator to keep transition logic centralised.
+ * 
+ * Mapped screens:
+ *  - MainTabs, Dashboard, LanguageSettings (core stack)
+ *  - CreatorProfile, FreelancerDirectory, FreelancerProfile (creator screens)
+ *  - ImagePicker, ImageEditor, PortfolioUpload (media uploads)
+ *  - Messaging, DetailsView (interaction screens)
+ *  - BiometricAuth, EmailVerification (auth screens)
+ *  - BountyDetail, PaymentComplete (commerce screens)
+ *  - ActivityTimeline, ActivityScreen (activity screens)
+ *  - StreamHost, StreamViewer (streaming screens)
+ *  - ProfileScreen (user profile)
  */
 export const ScreenTransitions: Record<string, StackAnimationTypes> = {
-  // Main stack
-  MainTabs:          Transitions.none,
-  Dashboard:         Transitions.slideFromRight,
-  LanguageSettings:  Transitions.slideFromRight,
-
-  // Modal presentations
+  // ── Core tabs ───────────────────────────────────────────────────────────
+  MainTabs:          Transitions.none,              // Tab switch - instant
+  
+  // ── Dashboard & Analytics ──────────────────────────────────────────────
+  Dashboard:         Transitions.slideFromRight,    // Standard push
+  
+  // ── Creator Screens ────────────────────────────────────────────────────
+  CreatorProfile:    Transitions.slideFromRight,    // Profile view
+  CreatorProfileScreenConnected: Transitions.slideFromRight,
+  
+  // ── Freelancer Screens ─────────────────────────────────────────────────
+  FreelancerDirectory: Transitions.slideFromRight,  // Directory list
+  FreelancerProfile:   Transitions.slideFromRight,  // Freelancer view
+  
+  // ── Settings & Config ──────────────────────────────────────────────────
+  LanguageSettings:  Transitions.slideFromRight,    // Settings list
+  ThemeSettings:     Transitions.slideFromRight,    // Theme picker
+  NotificationSettings: Transitions.slideFromRight, // Notification prefs
+  
+  // ── Upload & Media ─────────────────────────────────────────────────────
+  PortfolioUpload:   Transitions.slideFromBottom,   // Upload sheet
+  ImagePicker:       Transitions.slideFromBottom,   // Image picker sheet
+  ImageEditor:       Transitions.slideFromBottom,   // Editor sheet
+  
+  // ── Messaging & Details ────────────────────────────────────────────────
+  Messaging:         Transitions.slideFromRight,    // Chat view
+  DetailsView:       Transitions.slideFromRight,    // Detail view
+  
+  // ── Auth & Security ────────────────────────────────────────────────────
+  BiometricAuth:     Transitions.fadeScale,         // Overlay
+  EmailVerification: Transitions.fade,              // Simple fade
+  PaymentComplete:   Transitions.slideFromBottom,   // Success sheet
+  
+  // ── Activity ───────────────────────────────────────────────────────────
+  ActivityTimeline:  Transitions.slideFromRight,    // Timeline view
+  ActivityScreen:    Transitions.none,              // Tab screen
+  
+  // ── Streaming ──────────────────────────────────────────────────────────
+  StreamHost:        Transitions.slideFromBottom,   // Streaming sheet
+  StreamViewer:      Transitions.slideFromRight,    // Viewer view
+  
+  // ── Profile & Settings ─────────────────────────────────────────────────
+  ProfileScreen:     Transitions.slideFromRight,    // User profile
+  
+  // ── Bounties ───────────────────────────────────────────────────────────
+  BountyDetail:      Transitions.slideFromRight,    // Bounty details
+  
+  // ── Modal presentations (for full screen modal) ────────────────────────
   ShareScreen:       Transitions.slideFromBottom,
   RatingScreen:      Transitions.slideFromRight,
-  ActivityTimeline:  Transitions.slideFromRight,
-
-  // Overlay / dialog
   OfflineScreen:     Transitions.fadeScale,
-};
+} as const;
 
 // ─── Gesture config ───────────────────────────────────────────────────────────
 

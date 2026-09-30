@@ -21,6 +21,23 @@ const ar = {
     hoursAgo: 'منذ {{count}} ساعة',
     daysAgo: 'منذ {{count}} يوم',
   },
+
+  validation: {
+    required: 'هذا الحقل مطلوب',
+    email: 'يرجى إدخال عنوان بريد إلكتروني صالح',
+    minLength: 'مطلوب {{min}} حرفًا على الأقل',
+    maxLength: 'مسموح بـ {{max}} حرفًا كحد أقصى',
+    pattern: 'تنسيق غير صالح',
+    password:
+      'يجب أن تتكون كلمة المرور من 8 أحرف على الأقل مع حرف كبير وحرف صغير ورقم ورمز خاص',
+    phone: 'يرجى إدخال رقم هاتف صالح',
+    url: 'يرجى إدخال رابط صالح',
+    numeric: 'يرجى إدخال رقم صالح',
+    range: 'يجب أن تكون القيمة بين {{min}} و {{max}}',
+    match: 'القيم غير متطابقة',
+    stellarAddress: 'يرجى إدخال عنوان Stellar صالح',
+    username: 'يمكن أن يحتوي اسم المستخدم على أحرف وأرقام وشرطات سفلية وشرطات فقط',
+  },
   nav: {
     home: 'الرئيسية',
     creators: 'المبدعون',
@@ -111,6 +128,8 @@ const ar = {
     summaryTotal: 'إجمالي الأحداث',
     summaryEarnings: 'الأرباح',
     summaryBounties: 'المكافآت',
+    loading: 'جارٍ تحميل النشاط…',
+    refresh: 'تحديث',
   },
   share: {
     screenTitle: 'مشاركة',
@@ -118,10 +137,14 @@ const ar = {
     shareBounty: 'مشاركة المكافأة',
     shareReview: 'مشاركة المراجعة',
     shareAchievement: 'مشاركة الإنجاز',
+    sharePortfolio: 'مشاركة المحفظة',
+    shareLink: 'مشاركة الرابط',
     shareMessage: 'اكتشف {{name}} على تامجورا — سوق المبدعين!',
-    shareBountyMessage: 'اطلع على هذه المكافأة على تامجورا: {{title}}',
+    shareBountyMessage: 'اطّلع على هذه المكافأة على تامجورا: {{title}}',
     shareReviewMessage: 'لقد راجعت {{name}} للتو على تامجورا',
     shareAchievementMessage: 'لقد حصلت على شارة {{achievement}} على تامجورا!',
+    sharePortfolioMessage: 'اطّلع على هذه المحفظة على تامجورا: {{title}}',
+    shareLinkMessage: 'اطّلع على {{title}} على تامجورا: {{url}}',
     copyLink: 'نسخ الرابط',
     linkCopied: 'تم نسخ الرابط إلى الحافظة',
     shareVia: 'مشاركة عبر…',
@@ -137,6 +160,17 @@ const ar = {
     generating: 'جارٍ إنشاء الرابط…',
     profileUrl: 'رابط الملف الشخصي',
     bountyUrl: 'رابط المكافأة',
+    selectEndpoint: 'شارك إلى…',
+    searchEndpoints: 'البحث عن نقاط...',
+    noResults: 'لم يتم العثور على نقاط',
+    noEndpoints: 'لا توجد نقاط مشاركة متاحة',
+    preview: 'معاينة',
+    endpointType: {
+      social: 'اجتماعي',
+      messaging: 'مراسلة',
+      email: 'بريد إلكتروني',
+      system: 'نظام',
+    },
   },
   chat: {
     typeMessage: 'اكتب رسالة…',
@@ -174,6 +208,81 @@ const ar = {
     version: 'الإصدار {{version}}',
     languageChanged: 'تم تحديث اللغة إلى {{language}}',
     rtlNote: 'تم تفعيل تخطيط اليمين إلى اليسار',
+    
+    // Preferences
+    preferencesTitle: 'التفضيلات',
+    preferencesSubtitle: 'خصص تجربتك',
+    
+    // Appearance
+    appearanceSection: 'المظهر',
+    darkMode: 'الوضع الداكن',
+    darkModeDescription: 'استخدم دائمًا التصميم الداكن',
+    systemTheme: 'تصميم النظام',
+    systemThemeDescription: 'المطابقة لإعدادات الجهاز',
+    largerText: 'نص أكبر',
+    largerTextDescription: 'زيادة حجم الخط لتحسين القراءة',
+    highContrast: 'تباين عالي',
+    highContrastDescription: 'تحسين تباين الألوان للرؤية',
+    
+    // Notifications
+    notificationsSection: 'الإشعارات',
+    pushNotifications: 'إشعارات الدفع',
+    pushNotificationsDescription: 'تلقي تنبيهات دفع للرسائل والتحديثات',
+    notificationLevel: 'مستوى الإشعار',
+    notificationLevelDescription: 'التحكم في الإشعارات التي تستقبلها',
+    vibration: 'الاهتزاز',
+    vibrationDescription: 'تمكين ردود الفعل اللمسية للإشعارات',
+    sound: 'الصوت',
+    soundDescription: 'تشغيل أصوات للإشعارات الواردة',
+    
+    // Privacy
+    privacySection: 'الخصوصية',
+    profileVisibility: 'رؤية الملف الشخصي',
+    profileVisibilityDescription: 'إظهار ملفك الشخصي للغير',
+    lastSeen: 'اخر ظهور',
+    lastSeenDescription: 'إظهار متى كنت نشطًا آخر مرة',
+    screenRecording: 'حماية تسجيل الشاشة',
+    screenRecordingDescription: 'منع لقطات الشاشة وتسجيل الشاشة',
+    
+    // Data & Storage
+    dataSection: 'البيانات والتخزين',
+    dataUsage: 'وضع استخدام البيانات',
+    dataUsageDescription: 'التحكم في استهلاك البيانات',
+    autoDownload: 'تنزيل الوسائط تلقائيًا',
+    autoDownloadDescription: 'تنزيل الصور والفيديوهات تلقائيًا',
+    clearCache: 'مسح الذاكرة المؤقتة عند الخروج',
+    clearCacheDescription: 'إزالة البيانات المخزنة مؤقتًا عند إغلاق التطبيق',
+    
+    // Features
+    featuresSection: 'الميزات',
+    biometricAuth: 'المصادقة البيومترية',
+    biometricAuthDescription: 'استخدام Face ID أو Touch ID للوصول الآمن',
+    autoDarkSwitch: 'الوضع الداكن التلقائي',
+    autoDarkSwitchDescription: 'التبديل التلقائي بناءً على وقت اليوم',
+    
+    // Data usage options
+    dataStandard: 'قياسي',
+    dataStandardDescription: 'استخدام بيانات عادي (افتراضي)',
+    dataLow: 'منخفض',
+    dataLowDescription: 'تقليل استهلاك البيانات',
+    dataEconomy: 'اقتصادي',
+    dataEconomyDescription: 'استخدام أقل للبيانات',
+    
+    // Notification levels
+    levelNone: 'بدون',
+    levelNoneDescription: 'تعطيل جميع الإشعارات',
+    levelCritical: 'حرج فقط',
+    levelCriticalDescription: 'تنبيهات حرجة فقط',
+    levelImportant: ' مهم',
+    levelImportantDescription: 'تنبيهات مهمة وحرجة',
+    levelAll: 'الكل',
+    levelAllDescription: 'جميع الإشعارات',
+    
+    // Buttons
+    resetPreferences: 'إعادة تعيين التفضيلات',
+    resetPreferencesConfirm: 'إعادة تعيين جميع التفضيلات إلى الافتراضية؟',
+    resetComplete: 'تمت إعادة تعيين التفضيلات بنجاح',
+    resetError: 'فشل في إعادة تعيين التفضيلات',
   },
   home: {
     greeting: 'مرحبًا، صانع Tamgora',

@@ -66,7 +66,11 @@ export function MatchCard({ match, strategy, mode, contextId, onFeedbackSent }: 
               <p className="text-sm text-muted-foreground mt-0.5 line-clamp-1">{match.subtitle}</p>
             ) : null}
           </div>
-          <Badge variant="secondary" className="shrink-0 tabular-nums">
+          <Badge
+            variant="secondary"
+            className="shrink-0 tabular-nums"
+            aria-label={`${match.score}% match`}
+          >
             {match.score}%
           </Badge>
         </div>
@@ -82,7 +86,7 @@ export function MatchCard({ match, strategy, mode, contextId, onFeedbackSent }: 
       </CardContent>
       <CardFooter className="flex flex-col gap-2 pt-2 border-t border-border/60">
         <Button variant="outline" size="sm" className="w-full gap-2" asChild>
-          <Link href={match.href}>
+          <Link href={match.href} aria-label={`Open ${match.title}`}>
             Open
             <ExternalLink className="h-3.5 w-3.5" aria-hidden />
           </Link>
@@ -94,6 +98,7 @@ export function MatchCard({ match, strategy, mode, contextId, onFeedbackSent }: 
             size="sm"
             className={cn('flex-1 gap-1', done && done !== 'up' && 'opacity-40')}
             disabled={busy || !!done}
+            aria-pressed={done === 'up'}
             onClick={() => void sendFeedback(true)}
           >
             <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
@@ -105,6 +110,7 @@ export function MatchCard({ match, strategy, mode, contextId, onFeedbackSent }: 
             size="sm"
             className={cn('flex-1 gap-1', done && done !== 'down' && 'opacity-40')}
             disabled={busy || !!done}
+            aria-pressed={done === 'down'}
             onClick={() => void sendFeedback(false)}
           >
             <ThumbsDown className="h-3.5 w-3.5" aria-hidden />

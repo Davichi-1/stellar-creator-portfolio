@@ -21,6 +21,7 @@ import {
 import { authenticateBiometric } from '../services/BiometricAuthService';
 import { FontSize, FontWeight, Radius, Spacing } from '../theme/tokens';
 import { trigger as triggerHaptic } from '../haptics/HapticEngine';
+import { QRScannerModal } from '../components/QRScannerModal';
 
 type TransferStep = 'amount' | 'qrScan' | 'preview' | 'biometric' | 'submit' | 'success';
 
@@ -45,6 +46,7 @@ export function P2PTransferScreen() {
     recipientAddress: '',
     feeEstimate: null,
     isLoading: false,
+  isScanning: false,
   });
 
   const isValidStellarAddress = (address: string): boolean => /^G[A-Z2-7]{55}$/.test(address.trim());
@@ -58,9 +60,25 @@ export function P2PTransferScreen() {
   };
 
   const handleQRScan = useCallback(async () => {
-    // TODO: Integrate expo-barcode-scanner for real QR scanning
-    // For now, navigate to QR scanner placeholder
-    setState((prev) => ({ ...prev, error: undefined }));
+    // Open the QR scanner modal — expo-barcode-scanner integration
+    setState((prev) => ({ ...prev, error: undefined, isScanning: true }));
+  }, []);
+
+  const handleQRScanned = useCallback((address: string) => {
+    setState((prev) => ({
+      ...prev,
+      isScanning: false,
+      recipientAddress: address,
+      error: undefined,
+    }));
+
+    // Auto-lookup the recipient name
+    lookupUserByAddress(address).then((user) => {
+      setState((prev) => ({
+        ...prev,
+        recipientName: user?.name,
+      }));
+    });
   }, []);
 
   const handleRecipientChange = useCallback(
@@ -116,12 +134,14 @@ export function P2PTransferScreen() {
         feeEstimate,
         step: 'preview',
         isLoading: false,
+  isScanning: false,
       }));
     } catch (error) {
       setState((prev) => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to estimate fee',
         isLoading: false,
+  isScanning: false,
       }));
     }
   }, [state.amount, state.recipientAddress, state.token]);
@@ -178,6 +198,7 @@ export function P2PTransferScreen() {
           step: 'success',
           transactionHash: result.hash,
           isLoading: false,
+  isScanning: false,
         }));
         await triggerHaptic('success');
       } else {
@@ -185,6 +206,7 @@ export function P2PTransferScreen() {
           ...prev,
           error: result.error || 'Transfer failed',
           isLoading: false,
+  isScanning: false,
         }));
       }
     } catch (error) {
@@ -192,6 +214,7 @@ export function P2PTransferScreen() {
         ...prev,
         error: error instanceof Error ? error.message : 'Transfer failed',
         isLoading: false,
+  isScanning: false,
       }));
     }
   }, [state.amount, state.recipientAddress, state.token]);
@@ -213,6 +236,7 @@ export function P2PTransferScreen() {
       recipientAddress: '',
       feeEstimate: null,
       isLoading: false,
+  isScanning: false,
     });
   };
 
@@ -478,6 +502,11 @@ export function P2PTransferScreen() {
           </View>
         </View>
       )}
+      <QRScannerModal
+        visible={state.isScanning}
+        onClose={() => setState((prev) => ({ ...prev, isScanning: false }))}
+        onScanned={handleQRScanned}
+      />
     </SafeAreaView>
   );
 }

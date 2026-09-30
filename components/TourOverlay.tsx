@@ -6,18 +6,44 @@ import { createPortal } from 'react-dom';
 import { TourTooltip } from '@/components/TourTooltip';
 
 interface TourOverlayProps {
+  /** Whether the tour step is currently visible. */
   isOpen: boolean;
+  /** CSS selector for the element to spotlight (resolved via `document.querySelector`). */
   targetSelector: string;
+  /** Heading shown in the tooltip for this step. */
   title: string;
+  /** Body text shown in the tooltip for this step. */
   description: string;
+  /** Current step number, passed through to the tooltip's progress indicator. */
   step: number;
+  /** Total number of steps in the tour. */
   totalSteps: number;
+  /** Advance to the next step. */
   onNext: () => void;
+  /** Return to the previous step. */
   onPrevious: () => void;
+  /** Dismiss the tour; also fired when the backdrop is clicked. */
   onSkip: () => void;
+  /** Finish the tour from the final step. */
   onComplete: () => void;
 }
 
+/**
+ * Renders a single step of a guided product tour.
+ *
+ * When `isOpen` is true, portals into `document.body`:
+ * - a dimmed backdrop that calls `onSkip` when clicked,
+ * - a spotlight cut-out around the element matched by `targetSelector`,
+ *   re-measured on window resize and scroll so it follows the target,
+ * - a {@link TourTooltip} with the step's content and navigation callbacks.
+ *
+ * Renders nothing until mounted on the client (so it is SSR-safe) or while
+ * `isOpen` is false. If no element matches `targetSelector`, a warning is
+ * logged and the tooltip is shown without a spotlight.
+ *
+ * The component is stateless with respect to tour progress: the parent owns
+ * `step` and decides what `onNext` / `onPrevious` / `onSkip` / `onComplete` do.
+ */
 export function TourOverlay({
   isOpen,
   targetSelector,

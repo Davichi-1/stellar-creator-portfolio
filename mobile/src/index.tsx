@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StyleSheet, Platform } from 'react-native';
 import { ThemeProvider } from './theme/ThemeProvider';
 import { NetworkProvider } from './offline/NetworkProvider';
+import { I18nProvider } from './i18n/I18nProvider';
 import { AppNavigator } from './navigation/AppNavigator';
 import { ToastProvider } from './context/ToastContext';
 import { ToastContainer } from './components/Toast/ToastContainer';
@@ -43,14 +44,16 @@ function App() {
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <ToastProvider>
-        <ThemeProvider>
-          <NetworkProvider>
-            <AppNavigator />
-            <ToastContainer />
-          </NetworkProvider>
-        </ThemeProvider>
-      </ToastProvider>
+      <I18nProvider>
+        <ToastProvider>
+          <ThemeProvider>
+            <NetworkProvider>
+              <AppNavigator />
+              <ToastContainer />
+            </NetworkProvider>
+          </ThemeProvider>
+        </ToastProvider>
+      </I18nProvider>
     </GestureHandlerRootView>
   );
 }

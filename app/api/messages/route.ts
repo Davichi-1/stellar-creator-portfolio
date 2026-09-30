@@ -113,6 +113,21 @@ const handleMessageEvent = (socket: WebSocket, raw: string) => {
   }
 }
 
+/**
+ * Dual-purpose messages endpoint.
+ *
+ * When the request carries an `Upgrade: websocket` header, upgrades the
+ * connection and streams live events (`message`, `typing`, `read-receipt`,
+ * `moderated`, `pong`) via {@link handleMessageEvent}, sending the last 200
+ * messages as history on connect.
+ *
+ * Otherwise, treats the request as a plain history query: `?threadId=` filters
+ * to one thread and `?q=` does a case-insensitive substring search over each
+ * message's `metadata.plainText`.
+ *
+ * In-memory only ({@link getState}) — history and connected clients are lost
+ * on server restart and aren't shared across instances.
+ */
 export async function GET(request: NextRequest) {
   const upgradeHeader = request.headers.get('upgrade')
 
@@ -161,6 +176,11 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ messages: filtered })
 }
 
+/**
+ * Appends a message to the in-memory history and broadcasts it to every
+ * connected WebSocket client (see {@link GET}). Used as a fallback path for
+ * senders that can't hold a live socket open; does not require one.
+ */
 export async function POST(request: NextRequest) {
   const body = await request.json()
   const state = getState()

@@ -27,12 +27,7 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useTheme } from "../theme/ThemeProvider";
-// Wallet-connect-as-login is on hold in favor of Google sign-in (below) —
-// see useGoogleAuth.ts and the note in the component body. Only the
-// `AuthStatus` type is still used here (StatusCard's prop type); the hook
-// itself isn't called anymore.
-import type { AuthStatus } from "../hooks/useWalletAuth";
-import { useGoogleAuth } from "../hooks/useGoogleAuth";
+import { useWalletAuth, type AuthStatus } from "../hooks/useWalletAuth";
 import { FontSize, FontWeight, Radius, Shadow, Spacing } from "../theme/tokens";
 
 // ─── Status config ────────────────────────────────────────────────────────────
@@ -192,16 +187,9 @@ export function LoginScreen({
   onRegister?: () => void;
 }) {
   const { colors, isDark } = useTheme();
-  // Wallet-connect login is on hold in favor of Google sign-in below (see
-  // the import comment above) — not calling useWalletAuth() here anymore.
-  // Turns out it couldn't have been re-enabled as-is anyway: its actual
-  // return shape (attemptBiometric/submitPin/fallbackToWallet/retryBiometric/
-  // disconnect/resetError, per useWalletAuth.ts's own `return` statement)
-  // never matched what this screen destructured (status/session/error/
-  // connect/disconnect/resetError) — there is no `connect`. Pre-existing,
-  // not something introduced here. Whoever restores this needs to first
-  // reconcile the hook's real API with what a login screen wants from it.
-  const googleAuth = useGoogleAuth();
+  const { status, session, error, connect, disconnect, resetError } = useWalletAuth({
+    autoStart: false,
+  });
 
   // Fade-in hero on mount
   const fadeAnimRef = useRef(new Animated.Value(0));
@@ -214,21 +202,29 @@ export function LoginScreen({
     }).start();
   }, [fadeAnim]);
 
-  // Notify parent once Google sign-in resolves to a user record. Passing
-  // walletAddress through here even when empty — see the TODO in
-  // useGoogleAuth.ts about `onAuthenticated`'s (publicKey: string) shape
-  // assuming every authenticated user already has one, which won't be true
-  // for a Google sign-in that skipped linking a wallet.
   useEffect(() => {
-    if (googleAuth.status === "success" && googleAuth.user) {
-      onAuthenticated?.(googleAuth.user.walletAddress ?? "");
+    if (status === "authenticated" && session?.publicKey) {
+      onAuthenticated?.(session.publicKey);
     }
-  }, [googleAuth.status, googleAuth.user, onAuthenticated]);
+  }, [status, session?.publicKey, onAuthenticated]);
 
-  const handleGoogleSignIn = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    googleAuth.signIn();
-  }, [googleAuth]);
+  const isBusy =
+    status === "connecting" || status === "awaiting_wallet" || status === "verifying";
+
+  const handleConnect = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void connect();
+  }, [connect]);
+
+  const handleDisconnect = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void disconnect();
+  }, [disconnect]);
+
+  const handleRetry = useCallback(() => {
+    resetError();
+    void connect();
+  }, [connect, resetError]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: colors.background }]}>
@@ -246,87 +242,56 @@ export function LoginScreen({
           </View>
           <Text style={[styles.appName, { color: colors.text }]}>Tamgora</Text>
           <Text style={[styles.tagline, { color: colors.textSecondary }]}>
-            Sign in to access the creator marketplace
+            Connect a Stellar wallet to access the creator marketplace
           </Text>
         </Animated.View>
 
-        {googleAuth.status === "error" && googleAuth.error && (
-          <View
-            style={[cardStyles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}
-          >
-            <Text style={[cardStyles.error, { color: colors.error }]}>{googleAuth.error}</Text>
-          </View>
-        )}
+        <StatusCard
+          status={status}
+          publicKey={session?.publicKey}
+          error={error}
+          colors={colors}
+        />
 
-        {/* Actions */}
-        <View style={styles.actions}>
-          <WalletButton
-            label={
-              googleAuth.status === "requesting" || googleAuth.status === "verifying"
-                ? "Signing in…"
-                : "Continue with Google"
-            }
-            onPress={handleGoogleSignIn}
-            disabled={!googleAuth.isReady || googleAuth.status === "requesting" || googleAuth.status === "verifying"}
-            variant="primary"
-            colors={colors}
-          />
+        <View style={[styles.walletsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <Text style={[styles.walletsTitle, { color: colors.textTertiary }]}>
+            COMPATIBLE WALLETS
+          </Text>
+          {["Lobstr", "Solar Wallet", "Freighter", "Any WalletConnect v2 wallet"].map((w) => (
+            <View key={w} style={styles.walletRow}>
+              <View style={[styles.walletDot, { backgroundColor: colors.accent }]} />
+              <Text style={[styles.walletName, { color: colors.text }]}>{w}</Text>
+            </View>
+          ))}
         </View>
 
-        {/*
-          Wallet-connect-as-login is on hold in favor of Google sign-in
-          above — see the import comment at the top of this file for why,
-          and useWalletAuth.ts for the still-intact hook. Re-enable by
-          restoring this block (StatusCard/WalletButton usages above are
-          already wired, just unrendered).
-
-          <StatusCard
-            status={status}
-            publicKey={session?.publicKey}
-            error={error}
-            colors={colors}
-          />
-
-          <View style={[styles.walletsCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.walletsTitle, { color: colors.textTertiary }]}>
-              COMPATIBLE WALLETS
-            </Text>
-            {["Lobstr", "Solar Wallet", "Freighter", "Any WalletConnect v2 wallet"].map((w) => (
-              <View key={w} style={styles.walletRow}>
-                <View style={[styles.walletDot, { backgroundColor: colors.accent }]} />
-                <Text style={[styles.walletName, { color: colors.text }]}>{w}</Text>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.actions}>
-            {status === "authenticated" ? (
-              <WalletButton
-                label="Disconnect Wallet"
-                onPress={handleDisconnect}
-                disabled={false}
-                variant="outline"
-                colors={colors}
-              />
-            ) : status === "error" ? (
-              <WalletButton
-                label="Try Again"
-                onPress={handleRetry}
-                disabled={false}
-                variant="primary"
-                colors={colors}
-              />
-            ) : (
-              <WalletButton
-                label={isBusy ? "Connecting…" : "Connect Wallet"}
-                onPress={handleConnect}
-                disabled={isBusy}
-                variant="primary"
-                colors={colors}
-              />
-            )}
-          </View>
-        */}
+        <View style={styles.actions}>
+          {status === "authenticated" ? (
+            <WalletButton
+              label="Disconnect Wallet"
+              onPress={handleDisconnect}
+              disabled={false}
+              variant="outline"
+              colors={colors}
+            />
+          ) : status === "error" ? (
+            <WalletButton
+              label="Try Again"
+              onPress={handleRetry}
+              disabled={false}
+              variant="primary"
+              colors={colors}
+            />
+          ) : (
+            <WalletButton
+              label={isBusy ? "Connecting…" : "Connect Wallet"}
+              onPress={handleConnect}
+              disabled={isBusy}
+              variant="primary"
+              colors={colors}
+            />
+          )}
+        </View>
 
         {/* Legal note */}
         <Text style={[styles.legal, { color: colors.textTertiary }]}>

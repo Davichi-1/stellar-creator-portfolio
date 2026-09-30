@@ -5,25 +5,30 @@
 
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell,
   Mail,
   Smartphone,
-  Chrome,
   Clock,
-  Moon,
-  ToggleLeft,
-  ToggleRight,
   Save,
   RotateCcw,
   AlertCircle,
 } from 'lucide-react';
+import {
+  NotificationSettingsChannels,
+  NotificationChannel,
+} from './components/notification-settings-channels';
+import {
+  NotificationSettingsCategories,
+  NotificationCategory,
+} from './components/notification-settings-categories';
+import { NotificationSettingsQuietHours } from './components/notification-settings-quiet-hours';
 
-type NotificationChannel = 'firebase' | 'onesignal' | 'browser' | 'email';
+export type { NotificationChannel, NotificationCategory };
 
-interface UserPreferences {
+export interface UserPreferences {
   channels: Record<NotificationChannel, boolean>;
   quietHours?: {
     start: number;
@@ -38,14 +43,6 @@ interface UserPreferences {
   blockedCategories: string[];
   language: string;
   timezone: string;
-}
-
-interface NotificationCategory {
-  id: string;
-  name: string;
-  description: string;
-  icon: React.ReactNode;
-  enabled: boolean;
 }
 
 export default function NotificationSettingsPage() {
@@ -163,7 +160,7 @@ export default function NotificationSettingsPage() {
 
       setSaveStatus('success');
       setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch (error) {
+    } catch {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 2000);
     } finally {
@@ -186,9 +183,6 @@ export default function NotificationSettingsPage() {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
   };
-
-  const enabledChannelCount = Object.values(preferences.channels).filter(Boolean).length;
-  const enabledCategoryCount = categories.filter(c => c.enabled).length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-8 px-4">
@@ -246,194 +240,24 @@ export default function NotificationSettingsPage() {
         </AnimatePresence>
 
         {/* Notification Channels */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6"
-        >
-          <h2 className="text-xl font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <Smartphone size={20} />
-            Notification Channels
-          </h2>
-
-          <p className="text-slate-600 text-sm mb-4">
-            Choose how you want to receive notifications
-          </p>
-
-          <div className="space-y-3">
-            {[
-              {
-                id: 'firebase',
-                name: 'Firebase Cloud Messaging',
-                description: 'Mobile app notifications',
-                icon: <Smartphone size={18} />,
-              },
-              {
-                id: 'browser',
-                name: 'Browser Push',
-                description: 'Desktop browser notifications',
-                icon: <Chrome size={18} />,
-              },
-              {
-                id: 'email',
-                name: 'Email',
-                description: 'Email notifications',
-                icon: <Mail size={18} />,
-              },
-            ].map(channel => (
-              <button
-                key={channel.id}
-                onClick={() => handleChannelToggle(channel.id as NotificationChannel)}
-                className="w-full p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-3 text-left">
-                  <div className="text-slate-600">{channel.icon}</div>
-                  <div>
-                    <h3 className="font-medium text-slate-900">{channel.name}</h3>
-                    <p className="text-sm text-slate-500">{channel.description}</p>
-                  </div>
-                </div>
-                {preferences.channels[channel.id as NotificationChannel] ? (
-                  <ToggleRight className="text-blue-600" size={24} />
-                ) : (
-                  <ToggleLeft className="text-slate-400" size={24} />
-                )}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-700">
-              <strong>{enabledChannelCount}</strong> channel{enabledChannelCount !== 1 ? 's' : ''} enabled
-            </p>
-          </div>
-        </motion.section>
+        <NotificationSettingsChannels
+          channels={preferences.channels}
+          onToggle={handleChannelToggle}
+        />
 
         {/* Notification Categories */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6"
-        >
-          <h2 className="text-xl font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <Bell size={20} />
-            Notification Categories
-          </h2>
-
-          <p className="text-slate-600 text-sm mb-4">
-            Enable or disable notifications by category
-          </p>
-
-          <div className="space-y-3">
-            {categories.map(category => (
-              <button
-                key={category.id}
-                onClick={() => handleCategoryToggle(category.id)}
-                className="w-full p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-3 text-left">
-                  <div className="text-slate-600">{category.icon}</div>
-                  <div>
-                    <h3 className="font-medium text-slate-900">{category.name}</h3>
-                    <p className="text-sm text-slate-500">{category.description}</p>
-                  </div>
-                </div>
-                {category.enabled ? (
-                  <ToggleRight className="text-blue-600" size={24} />
-                ) : (
-                  <ToggleLeft className="text-slate-400" size={24} />
-                )}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-700">
-              <strong>{enabledCategoryCount}</strong> categor{enabledCategoryCount !== 1 ? 'ies' : 'y'} enabled
-            </p>
-          </div>
-        </motion.section>
+        <NotificationSettingsCategories
+          categories={categories}
+          onToggle={handleCategoryToggle}
+        />
 
         {/* Quiet Hours & Do Not Disturb */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6"
-        >
-          <h2 className="text-xl font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <Moon size={20} />
-            Quiet Hours
-          </h2>
-
-          <div className="space-y-4">
-            <button
-              onClick={handleDndToggle}
-              className="w-full p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-between group"
-            >
-              <div className="text-left">
-                <h3 className="font-medium text-slate-900">Do Not Disturb</h3>
-                <p className="text-sm text-slate-500 mt-1">
-                  Temporarily pause all notifications
-                </p>
-              </div>
-              {preferences.doNotDisturb ? (
-                <ToggleRight className="text-blue-600" size={24} />
-              ) : (
-                <ToggleLeft className="text-slate-400" size={24} />
-              )}
-            </button>
-
-            {preferences.doNotDisturb && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-4"
-              >
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-2">
-                    Start Time (Quiet Hours)
-                  </label>
-                  <select
-                    value={dndTime.start}
-                    onChange={(e) => handleDndTimeChange('start', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900"
-                  >
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>
-                        {String(i).padStart(2, '0')}:00
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-2">
-                    End Time
-                  </label>
-                  <select
-                    value={dndTime.end}
-                    onChange={(e) => handleDndTimeChange('end', parseInt(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900"
-                  >
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>
-                        {String(i).padStart(2, '0')}:00
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <p className="text-sm text-slate-600 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  Notifications will be silenced from {String(dndTime.start).padStart(2, '0')}:00 to{' '}
-                  {String(dndTime.end).padStart(2, '0')}:00 in your timezone
-                </p>
-              </motion.div>
-            )}
-          </div>
-        </motion.section>
+        <NotificationSettingsQuietHours
+          doNotDisturb={preferences.doNotDisturb}
+          dndTime={dndTime}
+          onToggleDnd={handleDndToggle}
+          onDndTimeChange={handleDndTimeChange}
+        />
 
         {/* Action Buttons */}
         <motion.div
@@ -443,6 +267,7 @@ export default function NotificationSettingsPage() {
           className="flex gap-3"
         >
           <button
+            type="button"
             onClick={handleSave}
             disabled={isSaving}
             className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
@@ -451,6 +276,7 @@ export default function NotificationSettingsPage() {
             {isSaving ? 'Saving...' : 'Save Preferences'}
           </button>
           <button
+            type="button"
             onClick={handleReset}
             className="flex-1 px-6 py-3 bg-slate-200 text-slate-900 rounded-lg font-medium hover:bg-slate-300 transition-colors flex items-center justify-center gap-2"
           >
@@ -462,5 +288,3 @@ export default function NotificationSettingsPage() {
     </div>
   );
 }
-
-import { AnimatePresence } from 'framer-motion';

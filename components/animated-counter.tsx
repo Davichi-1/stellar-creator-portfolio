@@ -8,6 +8,17 @@ interface AnimatedCounterProps {
   suffix?: string;
 }
 
+/**
+ * Displays a number that counts up from 0 to `value`, with a label beneath it.
+ *
+ * The animation starts the first time at least 10% of the component scrolls
+ * into view and runs once over 2 seconds with an ease-out curve. Intermediate
+ * values are floored to integers.
+ *
+ * @param value - Final number to count up to.
+ * @param label - Caption rendered below the number.
+ * @param suffix - Optional text appended to the number (e.g. `"+"` or `"%"`).
+ */
 export function AnimatedCounter({ value, label, suffix = '' }: AnimatedCounterProps) {
   const [displayValue, setDisplayValue] = useState(0);
   const ref = useRef<HTMLDivElement>(null);

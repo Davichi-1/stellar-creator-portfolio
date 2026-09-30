@@ -1,9 +1,43 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { GraphQLContext } from './context';
 
+interface PageArgs {
+  take?: number;
+  cursor?: string;
+}
+
+interface BountiesArgs extends PageArgs {
+  status?: string;
+}
+
+interface CreatorsArgs extends PageArgs {
+  discipline?: string;
+  search?: string;
+}
+
+interface CreateBountyArgs {
+  title: string;
+  description: string;
+  budget: number;
+  deadline: string;
+  category: string;
+  tags: string[];
+  difficulty: string;
+}
+
+interface CreateProjectArgs {
+  title: string;
+  category: string;
+  description: string;
+  tags: string[];
+  year: number;
+  link?: string;
+}
+
 export const resolvers = {
   Query: {
-    async bounties(_: any, args: any, ctx: GraphQLContext) {
+    async bounties(_parent: unknown, args: BountiesArgs, ctx: GraphQLContext) {
       if (!ctx.isAuthenticated && args.take > 50) {
         throw new Error('Unauthenticated requests limited to 50 results');
       }
@@ -48,7 +82,7 @@ export const resolvers = {
       };
     },
 
-    async bounty(_: any, args: any) {
+    async bounty(_parent: unknown, args: { id: string }) {
       return await prisma.bounty.findUnique({
         where: { id: args.id },
         select: {
@@ -74,8 +108,8 @@ export const resolvers = {
       });
     },
 
-    async creators(_: any, args: any) {
-      const where: any = {};
+    async creators(_parent: unknown, args: CreatorsArgs) {
+      const where: Prisma.CreatorProfileWhereInput = {};
       if (args.discipline) {
         where.discipline = args.discipline;
       }
@@ -119,7 +153,7 @@ export const resolvers = {
       };
     },
 
-    async creator(_: any, args: any) {
+    async creator(_parent: unknown, args: { id: string }) {
       return await prisma.creatorProfile.findUnique({
         where: { id: args.id },
         select: {
@@ -143,7 +177,7 @@ export const resolvers = {
       });
     },
 
-    async projects(_: any, args: any) {
+    async projects(_parent: unknown, args: PageArgs) {
       const projects = await prisma.bounty.findMany({
         take: (args.take || 10) + 1,
         ...(args.cursor && { cursor: { id: args.cursor }, skip: 1 }),
@@ -170,7 +204,7 @@ export const resolvers = {
       };
     },
 
-    async myBounties(_: any, args: any, ctx: GraphQLContext) {
+    async myBounties(_parent: unknown, args: PageArgs, ctx: GraphQLContext) {
       if (!ctx.userId) {
         throw new Error('Authentication required');
       }
@@ -203,7 +237,7 @@ export const resolvers = {
       };
     },
 
-    async analytics(_: any, args: any, ctx: GraphQLContext) {
+    async analytics(_parent: unknown, _args: Record<string, never>, ctx: GraphQLContext) {
       if (!ctx.userId) {
         throw new Error('Authentication required');
       }
@@ -232,7 +266,7 @@ export const resolvers = {
   },
 
   Mutation: {
-    async createBounty(_: any, args: any, ctx: GraphQLContext) {
+    async createBounty(_parent: unknown, args: CreateBountyArgs, ctx: GraphQLContext) {
       if (!ctx.userId) {
         throw new Error('Authentication required');
       }
@@ -252,7 +286,7 @@ export const resolvers = {
       });
     },
 
-    async createProject(_: any, args: any, ctx: GraphQLContext) {
+    async createProject(_parent: unknown, args: CreateProjectArgs, ctx: GraphQLContext) {
       if (!ctx.userId) {
         throw new Error('Authentication required');
       }

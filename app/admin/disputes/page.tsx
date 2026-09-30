@@ -41,7 +41,7 @@ export default function AdminDisputesPage() {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<'open' | 'resolved' | 'all'>('open');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -54,13 +54,13 @@ export default function AdminDisputesPage() {
     setLoading(true);
     try {
       const res = await fetch(
-        `/api/admin/disputes?status=${statusFilter}&page=${page}&limit=${LIMIT}`
+        `/api/admin/disputes?status=${statusFilter}&page=${page}&limit=${LIMIT}`,
       );
       if (!res.ok) throw new Error('Failed to load disputes');
       const data = await res.json();
       setDisputes(data.disputes);
       setTotal(data.total);
-    } catch (e) {
+    } catch {
       notify('Failed to load disputes');
     } finally {
       setLoading(false);
@@ -93,8 +93,8 @@ export default function AdminDisputesPage() {
       setNote('');
       setSelectedId(null);
       await load();
-    } catch (e: any) {
-      notify(e.message ?? 'Error resolving dispute');
+    } catch (e: unknown) {
+      notify(e instanceof Error ? e.message : 'Error resolving dispute');
     } finally {
       setResolving(false);
     }
@@ -103,49 +103,57 @@ export default function AdminDisputesPage() {
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 p-6">
-      {/* Toast */}
-      {toast && (
-        <div
-          aria-live="polite"
-          className="fixed top-4 right-4 z-50 bg-foreground text-background px-4 py-2 rounded-lg shadow-lg text-sm"
-        >
-          {toast}
-        </div>
-      )}
+    <div className="space-y-6">
+      <Toast message={toast ?? ''} />
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/admin" className="gap-1">
-            <ArrowLeft className="h-4 w-4" /> Admin
-          </Link>
+          <Link href="/admin"><ArrowLeft className="mr-1 h-4 w-4" />Admin</Link>
         </Button>
       </div>
 
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2 mb-1">
-          <Gavel className="h-6 w-6" /> Dispute Management
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Review disputes and trigger on-chain resolution. All actions are logged to the audit trail.
-        </p>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Gavel className="h-5 w-5" />
+            Dispute Management
+          </CardTitle>
+          <CardDescription>
+            Review disputes and trigger on-chain resolution. All actions are logged to the audit trail.
+          </CardDescription>
+        </CardHeader>
+      </Card>
+
+      <DisputeFilters
+        current={statusFilter}
+        onChange={(s) => { setStatusFilter(s); setPage(1); setSelectedId(null); }}
+        total={total}
+      />
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <DisputeList
+          disputes={disputes}
+          loading={loading}
+          selectedId={selectedId}
+          onSelect={(id) => { setSelectedId(id); setNote(''); }}
+          totalPages={totalPages}
+          currentPage={page}
+          onPageChange={setPage}
+        />
+
+        <DisputeDetail
+          dispute={selected}
+          note={note}
+          onNoteChange={setNote}
+          onResolve={resolve}
+          resolving={resolving}
+        />
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {(['open', 'resolved', 'all'] as const).map((s) => (
-          <Button
-            key={s}
-            size="sm"
-            variant={statusFilter === s ? 'default' : 'outline'}
-            onClick={() => { setStatusFilter(s); setPage(1); setSelectedId(null); }}
-          >
-            {s.charAt(0).toUpperCase() + s.slice(1)}
-          </Button>
-        ))}
-        <span className="ml-auto text-sm text-muted-foreground">{total} dispute{total !== 1 ? 's' : ''}</span>
-        <Button variant="ghost" size="icon" onClick={load} aria-label="Refresh">
-          <RefreshCw className="h-4 w-4" />
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+          <RefreshCw className="mr-1 h-4 w-4" />
+          Refresh
         </Button>
       </div>
 

@@ -23,6 +23,7 @@ async function ensureAudioMode(): Promise<void> {
   }
 }
 
+/** Configures the shared audio mode (once) and lazily creates the module-level `Audio.Sound` instance. */
 export async function initializeAudioPlayerAsync(): Promise<void> {
   await ensureAudioMode();
   if (!sound) {
@@ -30,6 +31,7 @@ export async function initializeAudioPlayerAsync(): Promise<void> {
   }
 }
 
+/** Unloads any current audio and loads `source`, paused, re-attaching the status listener if one is set. */
 export async function loadAudioAsync(source: Audio.Source): Promise<PlaybackStatus | null> {
   await initializeAudioPlayerAsync();
   if (!sound) {
@@ -46,6 +48,7 @@ export async function loadAudioAsync(source: Audio.Source): Promise<PlaybackStat
   return status;
 }
 
+/** Resumes the loaded sound and updates the shared `isAudioPlaying` UI state. No-op (returns `null`) if nothing is loaded. */
 export async function playAudioAsync(): Promise<PlaybackStatus | null> {
   if (!sound) {
     return null;
@@ -55,6 +58,7 @@ export async function playAudioAsync(): Promise<PlaybackStatus | null> {
   return status;
 }
 
+/** Pauses the loaded sound and updates the shared `isAudioPlaying` UI state. No-op (returns `null`) if nothing is loaded. */
 export async function pauseAudioAsync(): Promise<PlaybackStatus | null> {
   if (!sound) {
     return null;
@@ -64,6 +68,7 @@ export async function pauseAudioAsync(): Promise<PlaybackStatus | null> {
   return status;
 }
 
+/** Stops the loaded sound and updates the shared `isAudioPlaying` UI state. No-op (returns `null`) if nothing is loaded. */
 export async function stopAudioAsync(): Promise<PlaybackStatus | null> {
   if (!sound) {
     return null;
@@ -73,6 +78,7 @@ export async function stopAudioAsync(): Promise<PlaybackStatus | null> {
   return status;
 }
 
+/** Seeks the loaded sound to `positionMillis`. No-op (returns `null`) if nothing is loaded. */
 export async function seekAudioAsync(positionMillis: number): Promise<PlaybackStatus | null> {
   if (!sound) {
     return null;
@@ -80,6 +86,7 @@ export async function seekAudioAsync(positionMillis: number): Promise<PlaybackSt
   return sound.setPositionAsync(positionMillis);
 }
 
+/** Registers `listener` for playback status updates, attaching it immediately if a sound is already loaded. */
 export function setAudioPlaybackStatusListener(listener: (status: PlaybackStatus) => void): void {
   statusListener = listener;
   if (sound) {
@@ -87,6 +94,7 @@ export function setAudioPlaybackStatusListener(listener: (status: PlaybackStatus
   }
 }
 
+/** Unloads and releases the current sound, clearing track metadata and the shared `currentTrack` UI state. */
 export async function unloadAudioAsync(): Promise<void> {
   if (sound) {
     await sound.unloadAsync();
@@ -96,6 +104,11 @@ export async function unloadAudioAsync(): Promise<void> {
   useUIStore.setState({ currentTrack: null });
 }
 
+/**
+ * Loads `uri` and starts playback immediately, storing `metadata` as the
+ * shared `currentTrack` (for the mini-player) and wiring up now-playing info
+ * and remote-control (lock-screen/notification) handling.
+ */
 export async function loadAndPlayAsync(
   uri: string,
   metadata: { title: string; creator: string; artworkUrl?: string }

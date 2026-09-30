@@ -99,6 +99,17 @@ const STATUS_VARIANT: Record<EarningTransaction['status'], 'default' | 'secondar
   failed: 'destructive',
 }
 
+/**
+ * EarningsDashboard Component
+ *
+ * Displays the creator earnings dashboard, providing:
+ * - High-level summary metrics (annual, monthly, and pending escrow earnings)
+ * - Date range filtering for transaction history
+ * - Formatted transaction history table with pagination controls
+ * - Export options for CSV, IRS Form 1099-NEC text summary, and VAT invoices
+ *
+ * @returns The rendered earnings dashboard view.
+ */
 export function EarningsDashboard() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')

@@ -112,3 +112,48 @@ export const Shadow = {
     elevation: 6,
   },
 } as const;
+
+// ─── Unified Colors (default: light scheme) ───────────────────────────────────
+// Components that import `Colors` from this file get a flat palette ready for use.
+
+export const Colors = {
+  // Surface & layout
+  background:      LightColors.background,
+  surface:         LightColors.surface,
+  surfaceElevated: LightColors.surfaceElevated,
+  border:          LightColors.border,
+  borderStrong:    LightColors.borderStrong,
+
+  // Text
+  text:            LightColors.text,
+  textSecondary:   LightColors.textSecondary,
+  textTertiary:    LightColors.textTertiary,
+  textInverse:     LightColors.textInverse,
+  placeholder:     LightColors.placeholder,
+
+  // Brand
+  primary:         BrandColors.primary,
+  primaryDark:     BrandColors.primaryDark,
+  primaryLight:    BrandColors.primaryLight,
+  accent:          BrandColors.accent,
+  accentLight:     BrandColors.accentLight,
+  success:         BrandColors.success,
+  successLight:    BrandColors.successLight,
+  warning:         BrandColors.warning,
+  warningLight:    BrandColors.warningLight,
+  error:           BrandColors.error,
+  errorLight:      BrandColors.errorLight,
+  info:            BrandColors.info,
+  infoLight:       BrandColors.infoLight,
+  starFilled:      BrandColors.starFilled,
+  starEmpty:       BrandColors.starEmpty,
+
+  // Activity event-type colours
+  eventBounty:  '#6366f1', // indigo — bounty actions
+  eventReview:  '#f59e0b', // amber  — review actions
+  eventPayment: '#22c55e', // green  — payment actions
+  eventMessage: '#06b6d4', // cyan   — messaging
+  eventProfile: '#8b5cf6', // violet — profile views
+  eventMatch:   '#3b82f6', // blue   — match events
+  eventDispute: '#ef4444', // red    — dispute events
+} as const;

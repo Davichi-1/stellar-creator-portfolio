@@ -13,6 +13,9 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { stellarClient } from "@/services/api/stellar/client";
+import { contractService } from "@/services/api/stellar/contract";
+import type { Signer } from "@/services/api/stellar/types";
 import {
   acquireSequence,
   markSequenceUsed,
@@ -37,18 +40,80 @@ export type DrainerStats = {
 // Accounts currently being processed (to avoid concurrent draining per account)
 const inFlight = new Set<string>();
 
-// ── Soroban RPC stub ───────────────────────────────────────────────────────────
-// Replace with your actual Soroban RPC client call
+// Cumulative counters exposed by getDrainerStats(). Declared here rather than
+// beside the timer below so drainAccount can write to them without a
+// use-before-declaration.
+const stats: DrainerStats = {
+  processed: 0,
+  succeeded: 0,
+  failed: 0,
+  retried: 0,
+  uptimeMs: 0,
+};
 
-async function fetchNetworkSequenceForAccount(accountId: string): Promise<bigint> {
-  // TODO: replace with real RPC:
-  // const rpc = new StellarSdk.rpc.Server(process.env.SOROBAN_RPC_URL!);
-  // const acc = await rpc.getAccount(accountId);
-  // return BigInt(acc.sequence);
-  const lock = await prisma.sequenceLock.findUnique({ where: { accountId } });
-  return lock?.sequence ?? 0n;
+// ── Soroban RPC ────────────────────────────────────────────────────────────────
+//
+// These two functions were stubbed (Issue #1391). `fetchNetworkSequenceForAccount`
+// read the sequence back out of our own `sequenceLock` table — so the "refill
+// the pool from the network" path never touched the network and could not
+// recover from the drift it exists to correct. `submitToSorobanRPC` returned a
+// synthesised string, which meant every queued transaction was marked
+// `confirmed` with a fake hash and nothing was ever submitted.
+//
+// Both now go through `services/api/stellar`, which is already wrapped in the
+// shared circuit breaker — a raw `new rpc.Server(...)` here would bypass it and
+// let the drainer hammer a node that every other caller has already backed off
+// from.
+
+/**
+ * Signer resolution for the drainer.
+ *
+ * The drainer runs unattended, so it cannot prompt a wallet — it needs a signer
+ * per source account. How those keys are held is a deployment decision (KMS,
+ * env-injected secrets, a remote signing service), so the resolver is injected
+ * rather than assumed here.
+ *
+ * Call `setDrainerSigner` once at startup, alongside `startDrainer`.
+ */
+export type SignerResolver = (accountId: string) => Promise<Signer | null>;
+
+let resolveSigner: SignerResolver | null = null;
+
+/**
+ * Registers how the drainer obtains a signer for an account.
+ *
+ * Without this, `drainAccount` fails each transaction with a clear error rather
+ * than silently marking it confirmed — which is what the previous stub did, and
+ * is the worse failure by a wide margin: a queue that reports success while
+ * submitting nothing.
+ */
+export function setDrainerSigner(resolver: SignerResolver): void {
+  resolveSigner = resolver;
 }
 
+/** Reads the account's current sequence number from the network. */
+async function fetchNetworkSequenceForAccount(accountId: string): Promise<bigint> {
+  const account = await stellarClient.rpc.getAccount(accountId);
+  // `sequenceNumber()` is the last *used* sequence, as a decimal string.
+  return BigInt(account.sequenceNumber());
+}
+
+/**
+ * Builds, signs, submits and confirms a queued contract call.
+ *
+ * Delegates to `contractService.invokeContractMethod`, which simulates and
+ * assembles before submitting and then polls to a terminal status — so a hash
+ * returned here is a transaction that actually landed, not merely one that was
+ * accepted for processing.
+ *
+ * Note on `sequence`: the pooled sequence is what serialises submissions per
+ * account in this drainer, but the SDK reads the source account's sequence
+ * itself when it builds the transaction. Passing our pooled value through would
+ * require rebuilding the transaction by hand and giving up simulation, so the
+ * pool stays what it has always been — a concurrency gate — and the SDK owns
+ * the on-wire sequence. This is why a bad-sequence error is still possible and
+ * still handled below.
+ */
 async function submitToSorobanRPC(tx: {
   accountId: string;
   contractId: string;
@@ -56,8 +121,22 @@ async function submitToSorobanRPC(tx: {
   args: unknown;
   sequence: bigint;
 }): Promise<string> {
-  // TODO: replace with actual SDK submission
-  return `0x${tx.accountId.slice(0, 8)}_${tx.sequence}`;
+  if (resolveSigner == null) {
+    throw new Error(
+      "[drainer] no signer resolver registered — call setDrainerSigner() at startup",
+    );
+  }
+
+  const signer = await resolveSigner(tx.accountId);
+  if (signer == null) {
+    throw new Error(`[drainer] no signer available for account ${tx.accountId}`);
+  }
+
+  // Queue rows store `args` as JSON. A contract call takes a positional list,
+  // so a single value is wrapped rather than spread into characters.
+  const args = Array.isArray(tx.args) ? tx.args : tx.args == null ? [] : [tx.args];
+
+  return contractService.invokeContractMethod(tx.contractId, tx.method, args, signer);
 }
 
 function isBadSequenceError(err: unknown): boolean {
@@ -132,6 +211,9 @@ async function drainAccount(accountId: string): Promise<void> {
       ]);
 
       await markSequenceUsed(accountId, sequence);
+
+      stats.processed += 1;
+      stats.succeeded += 1;
     } catch (err) {
       const isBadSeq = isBadSequenceError(err);
 
@@ -157,11 +239,18 @@ async function drainAccount(accountId: string): Promise<void> {
         },
       });
 
+      // `stats` was declared and exposed through getDrainerStats() but never
+      // written to, so every counter read as 0 no matter how much the drainer
+      // had done — the one signal an operator has into a background process
+      // reported nothing.
       if (!exhausted) {
+        stats.retried += 1;
         console.warn(
           `[drainer] tx ${tx.id} attempt ${nextAttempts}/${MAX_ATTEMPTS}: ${isBadSeq ? "bad-seq, retrying" : "transient error"}`,
         );
       } else {
+        stats.processed += 1;
+        stats.failed += 1;
         console.error(`[drainer] tx ${tx.id} EXHAUSTED after ${MAX_ATTEMPTS} attempts`);
       }
     }
@@ -174,13 +263,6 @@ async function drainAccount(accountId: string): Promise<void> {
 
 let drainerTimer: ReturnType<typeof setInterval> | null = null;
 let startedAt: number | null = null;
-const stats: DrainerStats = {
-  processed: 0,
-  succeeded: 0,
-  failed: 0,
-  retried: 0,
-  uptimeMs: 0,
-};
 
 async function drainerTick(): Promise<void> {
   try {

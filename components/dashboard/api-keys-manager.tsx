@@ -24,6 +24,10 @@ interface ApiKeyRecord {
   createdAt: string;
 }
 
+/**
+ * Dashboard panel for creating, listing, and revoking a user's API keys —
+ * name, scopes, and optional expiry — with usage tracked via `trackEvent`.
+ */
 export function ApiKeysManager() {
   const [keys, setKeys] = useState<ApiKeyRecord[]>([]);
   const [name, setName] = useState("");
