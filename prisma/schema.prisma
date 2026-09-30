@@ -251,6 +251,8 @@ model Bounty {
   status      BountyStatus @default(OPEN)
   category    String?
   tags        String[]
+  /// Skill level required: beginner | intermediate | advanced | expert
+  difficulty  BountyDifficulty @default(beginner)
   applications BountyApplication[]
   testimonials Testimonial[]
   createdAt   DateTime @default(now())
@@ -259,7 +261,16 @@ model Bounty {
   @@index([creatorId])
   @@index([status])
   @@index([category])
+  @@index([difficulty])
 }
+
+enum BountyDifficulty {
+  beginner
+  intermediate
+  advanced
+  expert
+}
+
 
 enum BountyStatus {
   OPEN
