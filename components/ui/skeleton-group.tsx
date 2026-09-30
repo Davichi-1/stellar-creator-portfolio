@@ -162,3 +162,34 @@ export function FileBrowserSkeleton() {
     </div>
   );
 }
+
+/** Skeleton for one aggregated external-profile card (GitHub / Figma / website) */
+export function LinkCardSkeleton() {
+  return (
+    <div
+      className="animate-pulse rounded-lg border bg-card p-4 flex items-start gap-4"
+      role="status"
+      aria-busy="true"
+      aria-label="Loading linked profile"
+    >
+      <div className="h-16 w-16 shrink-0 rounded-full bg-muted" />
+      <div className="flex-1 space-y-2">
+        <div className="h-3 bg-muted rounded w-16" />
+        <div className="h-5 bg-muted rounded w-2/3" />
+        <div className="h-4 bg-muted rounded w-full" />
+        <div className="h-3 bg-muted rounded w-1/2" />
+      </div>
+    </div>
+  );
+}
+
+/** Skeleton for the profile portfolio widget: mirrors its 1 / 2 column grid */
+export function PortfolioWidgetSkeleton({ cards = 2 }: { cards?: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {Array.from({ length: cards }).map((_, i) => (
+        <LinkCardSkeleton key={i} />
+      ))}
+    </div>
+  );
+}

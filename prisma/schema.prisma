@@ -91,6 +91,7 @@ model User {
   kycSubmission       KYCSubmission?
   testimonials        Testimonial[] @relation("testimonial_creator")
   clientTestimonials  Testimonial[] @relation("testimonial_client")
+  projects            Project[]
 
   @@index([email])
 }
@@ -787,4 +788,24 @@ model KYCSubmission {
   @@index([userId])
   @@index([status])
   @@index([expiresAt])
+}
+
+/// Portfolio project. `description` holds sanitized rich-text HTML produced by
+/// the TipTap editor (see lib/rich-text/sanitize.ts); it is sanitized again on
+/// the server before every write.
+model Project {
+  id          String   @id @default(cuid())
+  creatorId   String
+  creator     User     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  title       String
+  category    String
+  description String   @db.Text
+  tags        String[]
+  year        Int
+  link        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([creatorId])
+  @@index([category])
 }
