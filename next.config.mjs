@@ -16,6 +16,8 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.amazonaws.com' },
       { protocol: 'https', hostname: 'ipfs.io' },
       { protocol: 'https', hostname: '*.supabase.co' },
+      // GitHub avatars shown by the profile portfolio widget.
+      { protocol: 'https', hostname: 'avatars.githubusercontent.com' },
     ],
   },
   // Use the git SHA as the Next.js build ID so every deployment is traceable

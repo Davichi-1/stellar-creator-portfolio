@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { protectedProcedure, publicProcedure, router } from './trpc-setup';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
-import { rateLimit } from './rateLimit';
+import { TRPCError } from '@trpc/server';
+import { sanitizeRichText, hasRichTextContent } from '@/lib/rich-text/sanitize';
 
 // Root router with Prisma-backed queries
 export const appRouter = router({
@@ -14,15 +15,24 @@ export const appRouter = router({
           take: z.number().int().positive().default(10),
           cursor: z.string().optional(),
           status: z.enum(['OPEN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
+          /** Minimum budget filter (inclusive, in USD cents or base unit). */
+          budget_min: z.number().int().nonnegative().optional(),
+          /** Maximum budget filter (inclusive). */
+          budget_max: z.number().int().positive().optional(),
         })
       )
       .use(rateLimit({ windowMs: 60_000, max: 60 }))
       .query(async ({ input }) => {
+        const budgetFilter: Record<string, number> = {};
+        if (input.budget_min !== undefined) budgetFilter.gte = input.budget_min;
+        if (input.budget_max !== undefined) budgetFilter.lte = input.budget_max;
+
         const bounties = await prisma.bounty.findMany({
           take: input.take + 1, // +1 to determine hasNextPage
           ...(input.cursor && { cursor: { id: input.cursor }, skip: 1 }), // skip cursor itself
           where: {
             ...(input.status && { status: input.status }),
+            ...(Object.keys(budgetFilter).length > 0 && { budget: budgetFilter }),
           },
           select: {
             id: true,
@@ -128,7 +138,7 @@ export const appRouter = router({
         });
       }),
 
-    // Create new bounty
+    // Create new bounty — emits BountyCreated event and writes audit log
     create: protectedProcedure
       .input(
         z.object({
@@ -143,13 +153,39 @@ export const appRouter = router({
       )
       .use(rateLimit({ windowMs: 60_000, max: 300 }))
       .mutation(async ({ ctx, input }) => {
-        return await prisma.bounty.create({
+        const bounty = await prisma.bounty.create({
           data: {
             ...input,
             creatorId: ctx.user!.id,
             status: 'OPEN',
           },
         });
+
+        // Emit domain event (non-blocking — listeners handle email/notifications)
+        emitEvent('BountyCreated', {
+          bountyId: bounty.id,
+          creatorId: ctx.user!.id,
+          title: bounty.title,
+          budget: bounty.budget,
+          category: bounty.category,
+        });
+
+        // Fire-and-forget audit log
+        void writeAuditLog({
+          userId: ctx.user!.id,
+          resource: 'bounty',
+          action: 'create',
+          resourceId: bounty.id,
+          payload: { title: bounty.title, budget: bounty.budget, status: 'OPEN' },
+          status: 'SUCCESS',
+          meta: {
+            traceId: (ctx.req?.headers?.get?.('traceparent') ?? undefined) as string | undefined,
+            httpMethod: 'POST',
+            requestPath: '/api/trpc/bounties.create',
+          },
+        });
+
+        return bounty;
       }),
   }),
 
@@ -329,9 +365,16 @@ export const appRouter = router({
       )
       .use(rateLimit({ windowMs: 60_000, max: 300 }))
       .mutation(async ({ ctx, input }) => {
+        // Never trust client-sanitized HTML: sanitize again before persisting.
+        const description = sanitizeRichText(input.description);
+        if (!hasRichTextContent(description)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Project details cannot be empty.' });
+        }
+
         return await prisma.project.create({
           data: {
             ...input,
+            description,
             creatorId: ctx.user!.id,
           },
         });
@@ -537,7 +580,6 @@ export const appRouter = router({
         await prisma.zKNullifier.create({
           data: {
             nullifier: input.nullifier,
-            createdAt: new Date(),
           },
         });
 

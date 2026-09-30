@@ -1,10 +1,10 @@
-"use client";
+'use client';
 
-import { useState, useCallback, useEffect } from "react";
-import { useForm, useWatch } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { Button } from "@/components/ui/button";
+import { useState, useCallback, useEffect } from 'react';
+import { useForm, useWatch } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { Button } from '@/components/ui/button';
 import {
     Form,
     FormControl,
@@ -13,53 +13,67 @@ import {
     FormItem,
     FormLabel,
     FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { SkillCombobox } from "@/components/ui/skill-combobox";
-import { ProfileCompletionIndicator } from "@/components/profile/profile-completion-indicator";
-import { trackEvent } from "@/lib/analytics/analytics";
-import { computeProfileCompletion } from "@/lib/profile-completion";
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { SkillCombobox } from '@/components/ui/skill-combobox';
+import { ProfileCompletionIndicator } from '@/components/profile/profile-completion-indicator';
+import { trackEvent } from '@/lib/analytics/analytics';
+import { computeProfileCompletion } from '@/lib/profile-completion';
+import { parseProfileLink, type ProfileLinkKind } from '@/lib/profile-links';
+import { useLinkVerification } from '@/lib/hooks/use-link-verification';
+import { LinkVerificationBadge } from '@/components/ui/link-verification-badge';
 import {
     PortfolioReorder,
     type PortfolioItem,
-} from "@/components/forms/portfolio-reorder";
+} from '@/components/forms/portfolio-reorder';
+
+/** Optional URL field that must also parse as a link for the given provider. */
+const providerUrl = (kind: ProfileLinkKind) =>
+    z
+        .string()
+        .url({ message: 'Please enter a valid URL.' })
+        .refine((value) => parseProfileLink(kind, value).ok, {
+            message: `That doesn't look like a valid ${kind} link.`,
+        })
+        .optional()
+        .or(z.literal(''));
 
 const profileFormSchema = z.object({
     displayName: z.string().min(2, {
-        message: "Display name must be at least 2 characters.",
+        message: 'Display name must be at least 2 characters.',
     }).max(30, {
-        message: "Display name must not be longer than 30 characters.",
+        message: 'Display name must not be longer than 30 characters.',
     }),
     bio: z.string().max(500).optional(),
-    avatar: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal("")),
+    avatar: z.string().url({ message: 'Please enter a valid URL.' }).optional().or(z.literal('')),
     skills: z.array(z.string()).default([]),
-    portfolioUrl: z.string().url().optional().or(z.literal("")),
-    githubUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal("")),
-    figmaUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal("")),
-    linkedinUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal("")),
-    websiteUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal("")),
+    portfolioUrl: z.string().url().optional().or(z.literal('')),
+    githubUrl: providerUrl('github'),
+    figmaUrl: providerUrl('figma'),
+    linkedinUrl: providerUrl('linkedin'),
+    websiteUrl: providerUrl('website'),
 });
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
 const defaultValues: ProfileFormValues = {
-    displayName: "",
-    bio: "",
-    avatar: "",
+    displayName: '',
+    bio: '',
+    avatar: '',
     skills: [],
-    portfolioUrl: "",
-    githubUrl: "",
-    figmaUrl: "",
-    linkedinUrl: "",
-    websiteUrl: "",
+    portfolioUrl: '',
+    githubUrl: '',
+    figmaUrl: '',
+    linkedinUrl: '',
+    websiteUrl: '',
 };
 
 export function ProfileForm() {
     const form = useForm<ProfileFormValues>({
         resolver: zodResolver(profileFormSchema),
         defaultValues,
-        mode: "onChange",
+        mode: 'onChange',
     });
 
     const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
@@ -73,6 +87,10 @@ export function ProfileForm() {
     );
 
     const watched = useWatch({ control: form.control });
+    const githubCheck = useLinkVerification('github', watched.githubUrl);
+    const figmaCheck = useLinkVerification('figma', watched.figmaUrl);
+    const linkedinCheck = useLinkVerification('linkedin', watched.linkedinUrl);
+    const websiteCheck = useLinkVerification('website', watched.websiteUrl);
     const completion = computeProfileCompletion({
         displayName: watched.displayName,
         avatar: watched.avatar || null,
@@ -84,7 +102,7 @@ export function ProfileForm() {
     });
 
     useEffect(() => {
-        trackEvent("profile_completion_rate", { percentage: completion.percentage });
+        trackEvent('profile_completion_rate', { percentage: completion.percentage });
     }, [completion.percentage]);
 
     async function onSubmit(data: ProfileFormValues) {
@@ -95,7 +113,7 @@ export function ProfileForm() {
                 portfolio: portfolioItems,
             };
             console.log(payload);
-            trackEvent("profile_updated", { completion: completion.percentage });
+            trackEvent('profile_updated', { completion: completion.percentage });
         } finally {
             setIsSaving(false);
         }
@@ -202,6 +220,7 @@ export function ProfileForm() {
                                 <FormControl>
                                     <Input placeholder="https://github.com/..." {...field} />
                                 </FormControl>
+                                <LinkVerificationBadge verification={githubCheck} hideWhenIdle />
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -215,6 +234,7 @@ export function ProfileForm() {
                                 <FormControl>
                                     <Input placeholder="https://linkedin.com/in/..." {...field} />
                                 </FormControl>
+                                <LinkVerificationBadge verification={linkedinCheck} hideWhenIdle />
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -228,6 +248,7 @@ export function ProfileForm() {
                                 <FormControl>
                                     <Input placeholder="https://figma.com/..." {...field} />
                                 </FormControl>
+                                <LinkVerificationBadge verification={figmaCheck} hideWhenIdle />
                                 <FormMessage />
                             </FormItem>
                         )}
@@ -241,12 +262,13 @@ export function ProfileForm() {
                                 <FormControl>
                                     <Input placeholder="https://yourportfolio.com" {...field} />
                                 </FormControl>
+                                <LinkVerificationBadge verification={websiteCheck} hideWhenIdle />
                                 <FormMessage />
                             </FormItem>
                         )}
                     />
                     <Button type="submit" disabled={isSaving}>
-                        {isSaving ? "Saving..." : "Update profile"}
+                        {isSaving ? 'Saving...' : 'Update profile'}
                     </Button>
                 </form>
             </Form>
